@@ -6,6 +6,7 @@ mod player;
 mod prelude;
 mod world;
 use amethyst::{
+    animation::AnimationBundle,
     assets::*,
     audio::{AudioBundle, SourceHandle, WavFormat},
     core::transform::*,
@@ -40,75 +41,6 @@ use prelude::*;
 use std::f32::consts::PI;
 use world::*;
 
-fn spawn_new_ball<'s>(sprite_sheet: SpriteSheetHandle, builder: impl Builder) {
-    let (body, collider) = {
-        let material = MaterialHandle::new(BasicMaterial::new(1.0, 0.01));
-        let shape = ShapeHandle::new(Ball::new(16.0));
-        (
-            RigidBodyDesc::new()
-                .position(Isometry2::new(Vector2::new(24.0, 256.0), 0.0))
-                .angular_inertia(1.0)
-                .mass(4.0),
-            ColliderDesc::new(shape).material(material),
-        )
-    };
-    builder
-        .with(PhysicsDesc::new(body, collider))
-        .with(SpriteRender {
-            sprite_sheet,
-            sprite_number: 0,
-        })
-        .build();
-}
-
-fn spawn_ball(world: &mut World) {
-    let entities = world.entities();
-    let update = world.write_resource::<LazyUpdate>();
-    let builder = update.create_entity(&entities);
-    let mut physics = world.write_resource::<Physics<f32>>();
-    let sprites = world.read_resource::<SpriteStorage>();
-    spawn_new_ball(sprites.ball_spritesheet.clone(), builder);
-}
-
-fn spawn_walls(world: &mut World) {
-    let body = RigidBodyDesc::new()
-        .position(Isometry2::new(Vector2::new(256.0, 0.0), 0.0))
-        .status(BodyStatus::Static);
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 512.0)));
-    let collider = ColliderDesc::new(shape);
-    world
-        .create_entity()
-        .with(PhysicsDesc::new(body, collider))
-        .build();
-    let body = RigidBodyDesc::new()
-        .position(Isometry2::new(Vector2::new(-256.0, 0.0), 0.0))
-        .status(BodyStatus::Static);
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 512.0)));
-    let collider = ColliderDesc::new(shape);
-    world
-        .create_entity()
-        .with(PhysicsDesc::new(body, collider))
-        .build();
-    let body = RigidBodyDesc::new()
-        .position(Isometry2::new(Vector2::new(0.0, 256.0), 0.0))
-        .status(BodyStatus::Static);
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(512.0, 16.0)));
-    let collider = ColliderDesc::new(shape);
-    world
-        .create_entity()
-        .with(PhysicsDesc::new(body, collider))
-        .build();
-    let body = RigidBodyDesc::new()
-        .position(Isometry2::new(Vector2::new(0.0, -256.0), 0.0))
-        .status(BodyStatus::Static);
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(512.0, 16.0)));
-    let collider = ColliderDesc::new(shape);
-    world
-        .create_entity()
-        .with(PhysicsDesc::new(body, collider))
-        .build();
-}
-
 #[derive(Default)]
 struct MyState {
     map_progress: Option<ProgressCounter>,
@@ -118,11 +50,12 @@ impl SimpleState for MyState {
     fn on_start(&mut self, mut data: StateData<'_, GameData<'_, '_>>) {
         data.world.register::<PhysicsHandle>();
 
-        let ball_spritesheet = load_spritesheet(data.world, get_resource("Ball"));
         let tile_spritesheet = load_spritesheet(data.world, get_resource("Tiles"));
-        data.world.insert(SpriteStorage {
-            ball_spritesheet,
-            tile_spritesheet,
+        data.world.insert(SpriteStorage { tile_spritesheet });
+
+        let player_prefab = load_prefab(data.world, get_resource("Player.ron"));
+        data.world.insert(PrefabStorage {
+            player: player_prefab,
         });
 
         let bounce_wav = load_sound_file(data.world, get_resource("bounce.wav"));
@@ -139,7 +72,6 @@ impl SimpleState for MyState {
         data.world.insert(MapStorage { village_map });
 
         spawn_player_world(&mut data.world);
-        spawn_walls(&mut data.world);
     }
 
     fn update(&mut self, data: &mut StateData<GameData>) -> SimpleTrans {
@@ -184,14 +116,6 @@ impl<'s> amethyst::ecs::System<'s> for ImguiDebugSystem {
                 ui.text(im_str!("This is a test!"));
                 ui.text(im_str!("FPS: {}", fps.sampled_fps()));
                 ui.separator();
-                if ui.button(im_str!("New ball"), [50.0, 20.0]) {
-                    if let Some(sprites) = sprites {
-                        spawn_new_ball(
-                            sprites.ball_spritesheet.clone(),
-                            update.create_entity(&entities),
-                        );
-                    }
-                }
                 let mut items = Vec::new();
                 let mut item_handles = Vec::new();
                 let mut idx = 0;
@@ -242,8 +166,20 @@ fn main() -> amethyst::Result<()> {
     let input_path = get_resource("input.ron");
 
     let game_data = GameDataBuilder::default()
+        .with_system_desc(
+            PrefabLoaderSystemDesc::<MyPrefabData>::default(),
+            "scene_loader",
+            &[],
+        )
         .with(Processor::<TiledMap>::new(), "tiled_map_processor", &[])
-        .with_bundle(TransformBundle::new())?
+        .with_bundle(AnimationBundle::<AnimationId, SpriteRender>::new(
+            "sprite_animation_control",
+            "sprite_sampler_interpolation",
+        ))?
+        .with_bundle(
+            TransformBundle::new()
+                .with_dep(&["sprite_animation_control", "sprite_sampler_interpolation"]),
+        )?
         .with_bundle(
             amethyst::input::InputBundle::<amethyst::input::StringBindings>::new()
                 .with_bindings_from_file(input_path)?,

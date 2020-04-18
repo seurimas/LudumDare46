@@ -1,15 +1,19 @@
 use amethyst::{
+    animation::*,
     assets::*,
     audio::{SourceHandle, WavFormat},
+    derive::PrefabData,
     ecs::*,
     error::Error,
     prelude::*,
     renderer::{
-        sprite::SpriteSheetHandle, types::Texture, ImageFormat, SpriteRender, SpriteSheet,
-        SpriteSheetFormat,
+        sprite::{prefab::SpriteScenePrefab, SpriteSheetHandle},
+        types::Texture,
+        ImageFormat, SpriteRender, SpriteSheet, SpriteSheetFormat,
     },
     utils::application_root_dir,
 };
+use serde::{Deserialize, Serialize};
 
 pub fn get_resource(str: &str) -> String {
     format!(
@@ -35,13 +39,27 @@ pub fn load_spritesheet<'a>(world: &mut World, path: String) -> SpriteSheetHandl
         &sprite_sheet_store,
     )
 }
+
+#[derive(Debug, Clone, Deserialize, PrefabData)]
+pub struct MyPrefabData {
+    sprite_scene: SpriteScenePrefab,
+    animation_set: AnimationSetPrefab<AnimationId, SpriteRender>,
+}
+
+pub fn load_prefab(world: &mut World, path: String) -> Handle<Prefab<MyPrefabData>> {
+    world.exec(|loader: PrefabLoader<'_, MyPrefabData>| loader.load(path, RonFormat, ()))
+}
+
+pub struct PrefabStorage {
+    pub player: Handle<Prefab<MyPrefabData>>,
+}
+
 pub fn load_sound_file<'a>(world: &mut World, path: String) -> SourceHandle {
     let loader = world.read_resource::<Loader>();
     loader.load(path, WavFormat, (), &world.read_resource())
 }
 
 pub struct SpriteStorage {
-    pub ball_spritesheet: SpriteSheetHandle,
     pub tile_spritesheet: SpriteSheetHandle,
 }
 
@@ -93,4 +111,40 @@ pub fn load_map<'a>(
     let loader = world.read_resource::<Loader>();
     let map_storage = world.read_resource::<AssetStorage<TiledMap>>();
     loader.load(path, TiledFormat::default(), progress, &map_storage)
+}
+
+#[derive(Eq, PartialOrd, PartialEq, Hash, Debug, Copy, Clone, Deserialize, Serialize)]
+pub enum Direction {
+    East,
+    North,
+    West,
+    South,
+}
+
+impl Direction {
+    pub fn vec() -> Vec<Self> {
+        vec![
+            Direction::East,
+            Direction::North,
+            Direction::West,
+            Direction::South,
+        ]
+    }
+}
+
+#[derive(Eq, PartialOrd, PartialEq, Hash, Debug, Copy, Clone, Deserialize, Serialize)]
+pub enum AnimationId {
+    Walk(Direction),
+    Attack(Direction),
+    Idle(Direction),
+}
+
+impl AnimationId {
+    pub fn direction(&self) -> Direction {
+        match self {
+            AnimationId::Walk(direction) => *direction,
+            AnimationId::Attack(direction) => *direction,
+            AnimationId::Idle(direction) => *direction,
+        }
+    }
 }

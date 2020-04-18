@@ -1,11 +1,11 @@
 use crate::SoundStorage;
 use amethyst::core::bundle::SystemBundle;
-use amethyst::core::transform::Transform;
 use amethyst::ecs::*;
 use amethyst::error::Error;
 use amethyst::{
     assets::AssetStorage,
     audio::{output::Output, Source, SourceHandle},
+    core::transform::{components::Parent, Transform},
 };
 use nalgebra::geometry::{Isometry2, Point2, Point3, UnitQuaternion};
 use nalgebra::{RealField, Vector2};
@@ -18,6 +18,8 @@ use nphysics2d::world::{
     DefaultGeometricalWorld, DefaultMechanicalWorld, GeometricalWorld, MechanicalWorld,
 };
 
+#[derive(Component)]
+#[storage(VecStorage)]
 pub struct PhysicsDesc {
     body: RigidBodyDesc<f32>,
     collider: ColliderDesc<f32>,
@@ -29,11 +31,27 @@ impl PhysicsDesc {
     }
 }
 
-impl Component for PhysicsDesc {
-    type Storage = DenseVecStorage<Self>;
+#[derive(Component)]
+#[storage(VecStorage)]
+pub struct AttachedSensor {
+    collider: ColliderDesc<f32>,
+    handle: Option<DefaultColliderHandle>,
 }
 
-#[derive(Clone)]
+impl AttachedSensor {
+    pub fn new(collider: ColliderDesc<f32>) -> Self {
+        AttachedSensor {
+            collider,
+            handle: None,
+        }
+    }
+    pub fn set_handle(&mut self, handle: DefaultColliderHandle) {
+        self.handle = Some(handle);
+    }
+}
+
+#[derive(Component, Debug, Clone)]
+#[storage(VecStorage)]
 pub struct PhysicsHandle {
     body: Option<DefaultBodyHandle>,
     collider: Option<DefaultColliderHandle>,
@@ -48,10 +66,6 @@ impl PhysicsHandle {
             fresh: true,
         }
     }
-}
-
-impl Component for PhysicsHandle {
-    type Storage = DenseVecStorage<Self>;
 }
 
 pub struct Physics<N: RealField> {
@@ -88,6 +102,21 @@ impl<N: RealField> Physics<N> {
             .colliders
             .insert(collider_desc.build(BodyPartHandle(handle, 0)));
         (handle, collider_handle)
+    }
+
+    pub fn add_child_collider(
+        &mut self,
+        parent_handle: &PhysicsHandle,
+        collider_desc: &ColliderDesc<N>,
+    ) -> DefaultColliderHandle {
+        if let Some(handle) = parent_handle.body {
+            let collider_handle = self
+                .colliders
+                .insert(collider_desc.build(BodyPartHandle(handle, 0)));
+            collider_handle
+        } else {
+            panic!("No parent!");
+        }
     }
 
     pub fn get_position(&self, handle: &PhysicsHandle) -> Option<Isometry2<N>> {
@@ -208,6 +237,8 @@ impl<'s> System<'s> for PhysicsSpawningSystem {
     type SystemData = (
         Write<'s, Physics<f32>>,
         ReadStorage<'s, PhysicsDesc>,
+        WriteStorage<'s, AttachedSensor>,
+        ReadStorage<'s, Parent>,
         WriteStorage<'s, PhysicsHandle>,
         WriteStorage<'s, Transform>,
         Entities<'s>,
@@ -215,7 +246,7 @@ impl<'s> System<'s> for PhysicsSpawningSystem {
 
     fn run(
         &mut self,
-        (mut physics, descs, mut handles, mut transforms, entities): Self::SystemData,
+        (mut physics, descs, mut attached, parent, mut handles, mut transforms, entities): Self::SystemData,
     ) {
         for (entity, desc) in (&entities, &descs).join() {
             if !handles.contains(entity) {
@@ -228,6 +259,17 @@ impl<'s> System<'s> for PhysicsSpawningSystem {
                     transforms.insert(entity, Transform::default());
                 }
                 handles.insert(entity, phys_handle);
+            }
+            for (child_entity, parent, attached) in (&entities, &parent, &mut attached).join() {
+                if parent.entity == entity {
+                    if let Some(handle) = handles.get(entity) {
+                        if attached.handle.is_none() {
+                            let sensor_handle =
+                                physics.add_child_collider(handle, &attached.collider);
+                            attached.set_handle(sensor_handle);
+                        }
+                    }
+                }
             }
         }
         for (entity, handle) in (&entities, &mut handles).join() {
