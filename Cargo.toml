@@ -5,13 +5,14 @@ authors = []
 edition = "2018"
 
 [dependencies]
-amethyst = "0.15.0"
+amethyst = { version = "0.15.0", features = ["amethyst_tiles", "tiles"] }
 nalgebra = "0.19"
 ncollide2d = "0.21"
 nphysics2d = "0.13"
 imgui = "0.2"
 amethyst-imgui = { git = "https://github.com/mbStavola/amethyst-imgui.git", branch = "amethyst-0.15" }
 serde = { version = "1.0", features = ["derive"] }
+tiled = "0.9.1"
 
 [features]
 empty = ["amethyst/empty"]

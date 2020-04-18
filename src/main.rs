@@ -1,8 +1,10 @@
 extern crate nalgebra as na;
+extern crate tiled;
 mod assets;
 mod physics;
 mod player;
 mod prelude;
+mod world;
 use amethyst::{
     assets::*,
     audio::{AudioBundle, SourceHandle, WavFormat},
@@ -19,6 +21,7 @@ use amethyst::{
         types::{DefaultBackend, Texture},
         ImageFormat, SpriteRender, SpriteSheet, SpriteSheetFormat,
     },
+    tiles::{MortonEncoder, RenderTiles2D},
     utils::{
         application_root_dir,
         fps_counter::{FpsCounter, FpsCounterBundle},
@@ -35,6 +38,7 @@ use physics::*;
 use player::*;
 use prelude::*;
 use std::f32::consts::PI;
+use world::*;
 
 fn spawn_new_ball<'s>(sprite_sheet: SpriteSheetHandle, builder: impl Builder) {
     let (body, collider) = {
@@ -103,62 +107,51 @@ fn spawn_walls(world: &mut World) {
         .create_entity()
         .with(PhysicsDesc::new(body, collider))
         .build();
-
-    let body = RigidBodyDesc::new()
-        .position(Isometry2::new(Vector2::new(64.0, 64.0), 0.0))
-        .status(BodyStatus::Static);
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
-    let collider = ColliderDesc::new(shape);
-    world
-        .create_entity()
-        .with(PhysicsDesc::new(body, collider))
-        .build();
-
-    let body = RigidBodyDesc::new()
-        .position(Isometry2::new(Vector2::new(-64.0, 64.0), 0.0))
-        .status(BodyStatus::Static);
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
-    let collider = ColliderDesc::new(shape);
-    world
-        .create_entity()
-        .with(PhysicsDesc::new(body, collider))
-        .build();
-
-    let body = RigidBodyDesc::new()
-        .position(Isometry2::new(Vector2::new(64.0, -64.0), 0.0))
-        .status(BodyStatus::Static);
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
-    let collider = ColliderDesc::new(shape);
-    world
-        .create_entity()
-        .with(PhysicsDesc::new(body, collider))
-        .build();
-
-    let body = RigidBodyDesc::new()
-        .position(Isometry2::new(Vector2::new(-64.0, -64.0), 0.0))
-        .status(BodyStatus::Static);
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
-    let collider = ColliderDesc::new(shape);
-    world
-        .create_entity()
-        .with(PhysicsDesc::new(body, collider))
-        .build();
 }
 
-struct MyState;
+#[derive(Default)]
+struct MyState {
+    map_progress: Option<ProgressCounter>,
+}
 
 impl SimpleState for MyState {
     fn on_start(&mut self, mut data: StateData<'_, GameData<'_, '_>>) {
         data.world.register::<PhysicsHandle>();
 
-        let sprite_sheet = load_spritesheet(data.world, get_resource("Ball"));
+        let ball_spritesheet = load_spritesheet(data.world, get_resource("Ball"));
+        let tile_spritesheet = load_spritesheet(data.world, get_resource("Tiles"));
         data.world.insert(SpriteStorage {
-            ball_spritesheet: sprite_sheet,
+            ball_spritesheet,
+            tile_spritesheet,
         });
+
         let bounce_wav = load_sound_file(data.world, get_resource("bounce.wav"));
         data.world.insert(SoundStorage { bounce_wav });
+
+        data.world.insert(AssetStorage::<TiledMap>::default());
+        let mut progress_counter = ProgressCounter::new();
+        let village_map = load_map(
+            data.world,
+            get_resource("Village.tmx"),
+            &mut progress_counter,
+        );
+        self.map_progress = Some(progress_counter);
+        data.world.insert(MapStorage { village_map });
+
         spawn_player_world(&mut data.world);
         spawn_walls(&mut data.world);
+    }
+
+    fn update(&mut self, data: &mut StateData<GameData>) -> SimpleTrans {
+        if let Some(map_progress) = &self.map_progress {
+            println!("{:?}", map_progress);
+            if map_progress.is_complete() {
+                println!("Spawning map!");
+                self.map_progress = None;
+                initialize_tile_world(&mut data.world);
+            }
+        }
+        SimpleTrans::None
     }
 }
 
@@ -249,6 +242,7 @@ fn main() -> amethyst::Result<()> {
     let input_path = get_resource("input.ron");
 
     let game_data = GameDataBuilder::default()
+        .with(Processor::<TiledMap>::new(), "tiled_map_processor", &[])
         .with_bundle(TransformBundle::new())?
         .with_bundle(
             amethyst::input::InputBundle::<amethyst::input::StringBindings>::new()
@@ -261,6 +255,7 @@ fn main() -> amethyst::Result<()> {
                         .with_clear([0.0, 0.0, 0.0, 1.0]),
                 )
                 .with_plugin(RenderFlat2D::default())
+                .with_plugin(RenderTiles2D::<WorldTile, MortonEncoder>::default())
                 .with_plugin(RenderDebugLines::default())
                 .with_plugin(RenderImgui::<amethyst::input::StringBindings>::default()),
         )?
@@ -272,7 +267,7 @@ fn main() -> amethyst::Result<()> {
         .with_barrier()
         .with(ImguiDebugSystem::default(), "imgui_demo", &[]);
 
-    let mut game = Application::new(resources_dir, MyState, game_data)?;
+    let mut game = Application::new(resources_dir, MyState::default(), game_data)?;
     game.run();
 
     Ok(())
