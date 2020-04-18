@@ -19,12 +19,12 @@ use nphysics2d::world::{
 };
 
 pub struct PhysicsDesc {
-    body: RigidBodyDesc<f64>,
-    collider: ColliderDesc<f64>,
+    body: RigidBodyDesc<f32>,
+    collider: ColliderDesc<f32>,
 }
 
 impl PhysicsDesc {
-    pub fn new(body: RigidBodyDesc<f64>, collider: ColliderDesc<f64>) -> Self {
+    pub fn new(body: RigidBodyDesc<f32>, collider: ColliderDesc<f32>) -> Self {
         PhysicsDesc { body, collider }
     }
 }
@@ -124,6 +124,14 @@ impl<N: RealField> Physics<N> {
         }
     }
 
+    pub fn set_velocity(&mut self, handle: &PhysicsHandle, vec: Vector2<N>) {
+        if let Some(handle) = handle.body {
+            if let Some(rigid_body) = self.bodies.rigid_body_mut(handle) {
+                rigid_body.set_linear_velocity(vec);
+            }
+        }
+    }
+
     pub fn apply_impulse(&mut self, handle: &PhysicsHandle, vec: Vector2<N>) {
         if let Some(handle) = handle.body {
             if let Some(body) = self.bodies.get_mut(handle) {
@@ -160,10 +168,7 @@ impl<N: RealField> Physics<N> {
 impl<N: RealField> Default for Physics<N> {
     fn default() -> Self {
         Self {
-            mech_world: DefaultMechanicalWorld::new(Vector2::new(
-                N::zero(),
-                N::from_f32(-9.8).expect("Bad number"),
-            )),
+            mech_world: DefaultMechanicalWorld::new(Vector2::new(N::zero(), N::zero())),
             geo_world: DefaultGeometricalWorld::new(),
             bodies: DefaultBodySet::new(),
             colliders: DefaultColliderSet::new(),
@@ -177,7 +182,7 @@ struct PhysicsSystem;
 
 impl<'s> System<'s> for PhysicsSystem {
     type SystemData = (
-        Write<'s, Physics<f64>>,
+        Write<'s, Physics<f32>>,
         ReadStorage<'s, PhysicsHandle>,
         WriteStorage<'s, Transform>,
     );
@@ -201,7 +206,7 @@ struct PhysicsSpawningSystem;
 
 impl<'s> System<'s> for PhysicsSpawningSystem {
     type SystemData = (
-        Write<'s, Physics<f64>>,
+        Write<'s, Physics<f32>>,
         ReadStorage<'s, PhysicsDesc>,
         WriteStorage<'s, PhysicsHandle>,
         WriteStorage<'s, Transform>,
@@ -218,7 +223,7 @@ impl<'s> System<'s> for PhysicsSpawningSystem {
                 let phys_handle = PhysicsHandle::new(handle, collider_handle);
                 if let Some(transform) = transforms.get(entity) {
                     let translation = transform.translation();
-                    physics.set_location(&phys_handle, translation.x as f64, translation.y as f64);
+                    physics.set_location(&phys_handle, translation.x as f32, translation.y as f32);
                 } else {
                     transforms.insert(entity, Transform::default());
                 }
@@ -246,7 +251,7 @@ impl<'s> System<'s> for PhysicsSpawningSystem {
 struct PhysicsDeletionSystem;
 
 impl<'s> System<'s> for PhysicsDeletionSystem {
-    type SystemData = (Write<'s, Physics<f64>>, Entities<'s>);
+    type SystemData = (Write<'s, Physics<f32>>, Entities<'s>);
 
     fn run(&mut self, (mut physics, entities): Self::SystemData) {
         let mut bodies_to_remove = Vec::new();
@@ -278,7 +283,7 @@ struct BounceSystem;
 
 impl<'s> System<'s> for BounceSystem {
     type SystemData = (
-        Write<'s, Physics<f64>>,
+        Write<'s, Physics<f32>>,
         Option<Read<'s, SoundStorage>>,
         Option<Read<'s, Output>>,
         Read<'s, AssetStorage<Source>>,

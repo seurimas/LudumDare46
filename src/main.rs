@@ -1,5 +1,8 @@
 extern crate nalgebra as na;
+mod assets;
 mod physics;
+mod player;
+mod prelude;
 use amethyst::{
     assets::*,
     audio::{AudioBundle, SourceHandle, WavFormat},
@@ -22,27 +25,16 @@ use amethyst::{
     },
 };
 use amethyst_imgui::RenderImgui;
+use assets::*;
 use imgui::*;
 use na::{Isometry2, Point2, Point3, RealField, UnitQuaternion, Vector2, Vector3};
 use ncollide2d::shape::*;
 use nphysics2d::material::*;
 use nphysics2d::object::*;
 use physics::*;
-use std::f64::consts::PI;
-
-fn initialize_camera(world: &mut World) {
-    // Setup camera in a way that our screen covers whole arena and (0, 0) is in the bottom left.
-    let ARENA_WIDTH = 480.0;
-    let ARENA_HEIGHT = 320.0;
-    let mut transform = Transform::default();
-    transform.set_translation_xyz(0.0, 0.0, 1.0);
-
-    world
-        .create_entity()
-        .with(Camera::standard_2d(ARENA_WIDTH, ARENA_HEIGHT))
-        .with(transform)
-        .build();
-}
+use player::*;
+use prelude::*;
+use std::f32::consts::PI;
 
 fn spawn_new_ball<'s>(sprite_sheet: SpriteSheetHandle, builder: impl Builder) {
     let (body, collider) = {
@@ -69,58 +61,88 @@ fn spawn_ball(world: &mut World) {
     let entities = world.entities();
     let update = world.write_resource::<LazyUpdate>();
     let builder = update.create_entity(&entities);
-    let mut physics = world.write_resource::<Physics<f64>>();
+    let mut physics = world.write_resource::<Physics<f32>>();
     let sprites = world.read_resource::<SpriteStorage>();
     spawn_new_ball(sprites.ball_spritesheet.clone(), builder);
 }
 
-fn spawn_wall(world: &mut World) {
+fn spawn_walls(world: &mut World) {
     let body = RigidBodyDesc::new()
-        .position(Isometry2::new(Vector2::new(24.0, 0.0), PI * 0.16667))
+        .position(Isometry2::new(Vector2::new(256.0, 0.0), 0.0))
         .status(BodyStatus::Static);
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(256.0, 16.0)));
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 512.0)));
     let collider = ColliderDesc::new(shape);
     world
         .create_entity()
         .with(PhysicsDesc::new(body, collider))
         .build();
-}
+    let body = RigidBodyDesc::new()
+        .position(Isometry2::new(Vector2::new(-256.0, 0.0), 0.0))
+        .status(BodyStatus::Static);
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 512.0)));
+    let collider = ColliderDesc::new(shape);
+    world
+        .create_entity()
+        .with(PhysicsDesc::new(body, collider))
+        .build();
+    let body = RigidBodyDesc::new()
+        .position(Isometry2::new(Vector2::new(0.0, 256.0), 0.0))
+        .status(BodyStatus::Static);
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(512.0, 16.0)));
+    let collider = ColliderDesc::new(shape);
+    world
+        .create_entity()
+        .with(PhysicsDesc::new(body, collider))
+        .build();
+    let body = RigidBodyDesc::new()
+        .position(Isometry2::new(Vector2::new(0.0, -256.0), 0.0))
+        .status(BodyStatus::Static);
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(512.0, 16.0)));
+    let collider = ColliderDesc::new(shape);
+    world
+        .create_entity()
+        .with(PhysicsDesc::new(body, collider))
+        .build();
 
-pub fn get_resource(str: &str) -> String {
-    format!(
-        "{}/resources/{}",
-        application_root_dir().unwrap().to_str().unwrap(),
-        str
-    )
-}
+    let body = RigidBodyDesc::new()
+        .position(Isometry2::new(Vector2::new(64.0, 64.0), 0.0))
+        .status(BodyStatus::Static);
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
+    let collider = ColliderDesc::new(shape);
+    world
+        .create_entity()
+        .with(PhysicsDesc::new(body, collider))
+        .build();
 
-pub fn load_texture<'a>(world: &mut World, path: String) -> Handle<Texture> {
-    let loader = world.read_resource::<Loader>();
-    let texture_storage = world.read_resource::<AssetStorage<Texture>>();
-    loader.load(path, ImageFormat::default(), (), &texture_storage)
-}
-pub fn load_spritesheet<'a>(world: &mut World, path: String) -> SpriteSheetHandle {
-    let texture_handle = load_texture(world, format!("{}.png", path));
-    let loader = world.read_resource::<Loader>();
-    let sprite_sheet_store = world.read_resource::<AssetStorage<SpriteSheet>>();
-    loader.load(
-        format!("{}.ron", path), // Here we load the associated ron file
-        SpriteSheetFormat(texture_handle),
-        (),
-        &sprite_sheet_store,
-    )
-}
-pub fn load_sound_file<'a>(world: &mut World, path: String) -> SourceHandle {
-    let loader = world.read_resource::<Loader>();
-    loader.load(path, WavFormat, (), &world.read_resource())
-}
+    let body = RigidBodyDesc::new()
+        .position(Isometry2::new(Vector2::new(-64.0, 64.0), 0.0))
+        .status(BodyStatus::Static);
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
+    let collider = ColliderDesc::new(shape);
+    world
+        .create_entity()
+        .with(PhysicsDesc::new(body, collider))
+        .build();
 
-struct SpriteStorage {
-    ball_spritesheet: SpriteSheetHandle,
-}
+    let body = RigidBodyDesc::new()
+        .position(Isometry2::new(Vector2::new(64.0, -64.0), 0.0))
+        .status(BodyStatus::Static);
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
+    let collider = ColliderDesc::new(shape);
+    world
+        .create_entity()
+        .with(PhysicsDesc::new(body, collider))
+        .build();
 
-struct SoundStorage {
-    bounce_wav: SourceHandle,
+    let body = RigidBodyDesc::new()
+        .position(Isometry2::new(Vector2::new(-64.0, -64.0), 0.0))
+        .status(BodyStatus::Static);
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
+    let collider = ColliderDesc::new(shape);
+    world
+        .create_entity()
+        .with(PhysicsDesc::new(body, collider))
+        .build();
 }
 
 struct MyState;
@@ -135,9 +157,8 @@ impl SimpleState for MyState {
         });
         let bounce_wav = load_sound_file(data.world, get_resource("bounce.wav"));
         data.world.insert(SoundStorage { bounce_wav });
-        initialize_camera(&mut data.world);
-        spawn_ball(&mut data.world);
-        spawn_wall(&mut data.world);
+        spawn_player_world(&mut data.world);
+        spawn_walls(&mut data.world);
     }
 }
 
@@ -158,7 +179,7 @@ impl<'s> amethyst::ecs::System<'s> for ImguiDebugSystem {
     type SystemData = (
         Read<'s, FpsCounter>,
         Option<Read<'s, SpriteStorage>>,
-        Write<'s, Physics<f64>>,
+        Write<'s, Physics<f32>>,
         Entities<'s>,
         ReadStorage<'s, PhysicsHandle>,
         Read<'s, LazyUpdate>,
@@ -208,7 +229,7 @@ impl<'s> amethyst::ecs::System<'s> for ImguiDebugSystem {
                     for (handle) in (&handles).join() {
                         physics.set_rotation(
                             handle,
-                            self.box_current as f64 / 360.0 as f64 * std::f64::consts::FRAC_PI_2,
+                            self.box_current as f32 / 360.0 as f32 * std::f32::consts::FRAC_PI_2,
                         );
                     }
                     println!("{}", self.box_current);
@@ -225,12 +246,14 @@ fn main() -> amethyst::Result<()> {
 
     let resources_dir = app_root.join("resources");
     let display_config_path = resources_dir.join("display_config.ron");
+    let input_path = get_resource("input.ron");
 
     let game_data = GameDataBuilder::default()
         .with_bundle(TransformBundle::new())?
-        .with_bundle(amethyst::input::InputBundle::<
-            amethyst::input::StringBindings,
-        >::default())?
+        .with_bundle(
+            amethyst::input::InputBundle::<amethyst::input::StringBindings>::new()
+                .with_bindings_from_file(input_path)?,
+        )?
         .with_bundle(
             RenderingBundle::<DefaultBackend>::new()
                 .with_plugin(
@@ -243,6 +266,7 @@ fn main() -> amethyst::Result<()> {
         )?
         .with_bundle(AudioBundle::default())?
         .with_bundle(PhysicsBundle)?
+        .with_bundle(PlayerBundle)?
         .with_bundle(FpsCounterBundle)?
         .with(DebugDrawShapes, "debug_shapes", &[])
         .with_barrier()
@@ -259,7 +283,7 @@ pub trait IsoConvert {
     fn pos3(&self) -> Point3<f32>;
 }
 
-impl IsoConvert for Isometry2<f64> {
+impl IsoConvert for Isometry2<f32> {
     fn pos2(&self) -> Point2<f32> {
         [self.translation.x as f32, self.translation.y as f32].into()
     }
@@ -271,18 +295,18 @@ impl IsoConvert for Isometry2<f64> {
 struct DebugDrawShapes;
 
 impl<'s> System<'s> for DebugDrawShapes {
-    type SystemData = (Write<'s, DebugLines>, Read<'s, Physics<f64>>);
+    type SystemData = (Write<'s, DebugLines>, Read<'s, Physics<f32>>);
 
     fn run(&mut self, (mut debugLines, physics): Self::SystemData) {
         for (handle, collider) in physics.colliders.iter() {
-            if let Some(circle) = collider.shape().as_shape::<Ball<f64>>() {
+            if let Some(circle) = collider.shape().as_shape::<Ball<f32>>() {
                 debugLines.draw_circle(
                     collider.position().pos3(),
                     circle.radius() as f32,
                     16,
                     Srgba::new(1.0, 1.0, 1.0, 1.0),
                 );
-            } else if let Some(cube) = collider.shape().as_shape::<Cuboid<f64>>() {
+            } else if let Some(cube) = collider.shape().as_shape::<Cuboid<f32>>() {
                 let pos = collider.position().pos2();
                 let ext = cube.half_extents();
                 debugLines.draw_rotated_rectangle(
