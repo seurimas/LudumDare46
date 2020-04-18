@@ -147,4 +147,11 @@ impl AnimationId {
             AnimationId::Idle(direction) => *direction,
         }
     }
+
+    pub fn is_attack(&self) -> bool {
+        match self {
+            AnimationId::Attack(_) => true,
+            _ => false,
+        }
+    }
 }

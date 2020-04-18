@@ -1,9 +1,11 @@
 use crate::assets::{AnimationId, Direction, PrefabStorage};
 use crate::physics::*;
+use crate::prelude::*;
 use amethyst::{
     animation::*,
     assets::Handle,
     core::{bundle::SystemBundle, transform::*},
+    ecs::world::LazyBuilder,
     ecs::*,
     error::Error,
     input::{InputHandler, StringBindings},
@@ -32,10 +34,19 @@ pub fn initialize_camera(builder: impl Builder, player: Entity) -> Entity {
         .build()
 }
 
+#[derive(Debug, PartialEq)]
+pub enum PlayerState {
+    Moving,
+    Attacking,
+    Hit,
+}
+
 #[derive(Component, Debug)]
 #[storage(VecStorage)]
 pub struct Player {
     pub walk_speed: f32,
+    pub state: PlayerState,
+    pub facing: Direction,
 }
 
 fn spawn_player(prefabs: &PrefabStorage, player_builder: impl Builder) -> Entity {
@@ -46,16 +57,23 @@ fn spawn_player(prefabs: &PrefabStorage, player_builder: impl Builder) -> Entity
         .with(PhysicsDesc::new(body, collider))
         .with(prefabs.player.clone())
         .with(Transform::default())
-        .with(Player { walk_speed: 100.0 })
+        .with(Player {
+            walk_speed: 100.0,
+            state: PlayerState::Moving,
+            facing: Direction::South,
+        })
         .build()
 }
 
-fn spawn_test_sensor(builder: impl Builder, player: Entity) -> Entity {
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(32.0, 32.0)));
+const ATTACK_SENSOR_NAME: &'static str = "player_attack_sensor";
+
+fn spawn_test_sensor(builder: LazyBuilder, player: Entity) -> Entity {
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
     let collider = ColliderDesc::new(shape).sensor(true);
     builder
         .with(AttachedSensor::new(collider))
         .with(Parent { entity: player })
+        .named(ATTACK_SENSOR_NAME)
         .build()
 }
 
@@ -76,7 +94,6 @@ fn get_active_animation(
 ) -> Option<AnimationId> {
     for (id, animation) in control_set.animations.iter() {
         if animation.state.is_running() {
-            println!("{:?}", id);
             return Some(*id);
         }
     }
@@ -145,6 +162,85 @@ impl<'s> System<'s> for PlayerAnimationSystem {
     }
 }
 
+struct PlayerAttackSystem;
+impl<'s> System<'s> for PlayerAttackSystem {
+    type SystemData = (
+        Read<'s, InputHandler<StringBindings>>,
+        Write<'s, Physics<f32>>,
+        ReadStorage<'s, AttachedSensor>,
+        ReadStorage<'s, PhysicsHandle>,
+        ReadStorage<'s, Named>,
+        ReadStorage<'s, AnimationSet<AnimationId, SpriteRender>>,
+        WriteStorage<'s, AnimationControlSet<AnimationId, SpriteRender>>,
+        WriteStorage<'s, Player>,
+        Entities<'s>,
+    );
+
+    fn run(
+        &mut self,
+        (
+            input,
+            mut physics,
+            sensors,
+            handles,
+            names,
+            animation_sets,
+            mut control_sets,
+            mut player,
+            entities,
+        ): Self::SystemData,
+    ) {
+        if let Some((entity, handle, player)) = (&entities, &handles, &mut player).join().next() {
+            match player.state {
+                PlayerState::Moving => {
+                    if Some(true) == input.action_is_down("attack") {
+                        player.state = PlayerState::Attacking;
+                        physics.set_velocity(handle, Vector2::new(0.0, 0.0));
+                        if let (Some(animation_set), Some(control_set)) = (
+                            animation_sets.get(entity),
+                            get_animation_set(&mut control_sets, entity),
+                        ) {
+                            set_active_animation(
+                                control_set,
+                                AnimationId::Attack(player.facing),
+                                &animation_set,
+                                EndControl::Stay,
+                                1.0,
+                            );
+                        }
+                    }
+                }
+                PlayerState::Attacking => {
+                    if let (Some(animation_set), Some(control_set)) = (
+                        animation_sets.get(entity),
+                        get_animation_set(&mut control_sets, entity),
+                    ) {
+                        if let Some(AnimationId::Attack(_)) = get_active_animation(control_set) {
+                            if let Some(sensor) =
+                                get_named_entity(&entities, &names, ATTACK_SENSOR_NAME)
+                            {
+                                if let Some(sensor) = sensors.get(sensor) {
+                                    physics.set_sensor_position(sensor, 8.0, 8.0);
+                                }
+                            }
+                        } else {
+                            player.state = PlayerState::Moving;
+                            set_active_animation(
+                                control_set,
+                                AnimationId::Idle(player.facing),
+                                &animation_set,
+                                EndControl::Loop(None),
+                                1.0,
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
 struct PlayerMovementSystem;
 impl<'s> System<'s> for PlayerMovementSystem {
     type SystemData = (
@@ -153,18 +249,22 @@ impl<'s> System<'s> for PlayerMovementSystem {
         ReadStorage<'s, PhysicsHandle>,
         ReadStorage<'s, AnimationSet<AnimationId, SpriteRender>>,
         WriteStorage<'s, AnimationControlSet<AnimationId, SpriteRender>>,
-        ReadStorage<'s, Player>,
+        WriteStorage<'s, Player>,
         Entities<'s>,
     );
 
     fn run(
         &mut self,
-        (input, mut physics, handles, animation_sets, mut control_sets, player, entities): Self::SystemData,
+        (input, mut physics, handles, animation_sets, mut control_sets, mut player, entities): Self::SystemData,
     ) {
         let x_tilt = input.axis_value("leftright");
         let y_tilt = input.axis_value("updown");
         if let (Some(x_tilt), Some(y_tilt)) = (x_tilt, y_tilt) {
-            if let Some((entity, handle, player)) = (&entities, &handles, &player).join().next() {
+            if let Some((entity, handle, player)) = (&entities, &handles, &mut player).join().next()
+            {
+                if player.state != PlayerState::Moving {
+                    return;
+                }
                 physics.set_velocity(
                     handle,
                     Vector2::new(x_tilt * player.walk_speed, y_tilt * player.walk_speed),
@@ -188,10 +288,8 @@ impl<'s> System<'s> for PlayerMovementSystem {
                                     Direction::South
                                 }
                             }
-                        } else if let Some(previous_animation) = get_active_animation(control_set) {
-                            previous_animation.direction()
                         } else {
-                            Direction::East
+                            player.facing
                         }
                     };
                     set_active_animation(
@@ -205,6 +303,7 @@ impl<'s> System<'s> for PlayerMovementSystem {
                         EndControl::Loop(None),
                         1.0,
                     );
+                    player.facing = direction;
                 }
             }
         }
@@ -220,7 +319,8 @@ impl<'a, 'b> SystemBundle<'a, 'b> for PlayerBundle {
         dispatcher: &mut DispatcherBuilder<'a, 'b>,
     ) -> Result<(), Error> {
         dispatcher.add(PlayerAnimationSystem, "player_animation", &[]);
-        dispatcher.add(PlayerMovementSystem, "player_movement", &[]);
+        dispatcher.add(PlayerAttackSystem, "player_attack", &[]);
+        dispatcher.add(PlayerMovementSystem, "player_movement", &["player_attack"]);
         Ok(())
     }
 }

@@ -130,6 +130,7 @@ Prefab(
                                 ],
                             ),
                         ),
+			
                         (
                             // AnimationId
                             Walk(East),
@@ -192,6 +193,75 @@ Prefab(
                                         (
                                             input: [0.0, 0.25, 0.5, 0.75, 1.0],
                                             output: [19, 20, 19, 21, 19],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
+			
+                        (
+                            // AnimationId
+                            Attack(East),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 0.125, 0.25, 0.5],
+                                            output: [8, 24, 25, 8],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
+                        (
+                            // AnimationId
+                            Attack(North),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 0.125, 0.25, 0.5],
+                                            output: [11, 26, 27, 11],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
+                        (
+                            // AnimationId
+                            Attack(West),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 0.125, 0.25, 0.5],
+                                            output: [16, 28, 29, 16],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
+                        (
+                            // AnimationId
+                            Attack(South),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 0.125, 0.25, 0.5],
+                                            output: [19, 30, 31, 19],
                                             function: Step,
                                         ),
                                     ),

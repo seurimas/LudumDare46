@@ -35,7 +35,7 @@ impl PhysicsDesc {
 #[storage(VecStorage)]
 pub struct AttachedSensor {
     collider: ColliderDesc<f32>,
-    handle: Option<DefaultColliderHandle>,
+    handle: Option<(DefaultBodyHandle, DefaultColliderHandle)>,
 }
 
 impl AttachedSensor {
@@ -45,7 +45,7 @@ impl AttachedSensor {
             handle: None,
         }
     }
-    pub fn set_handle(&mut self, handle: DefaultColliderHandle) {
+    pub fn set_handle(&mut self, handle: (DefaultBodyHandle, DefaultColliderHandle)) {
         self.handle = Some(handle);
     }
 }
@@ -137,6 +137,20 @@ impl<N: RealField> Physics<N> {
                 rigid_body.set_position(Isometry2::new(
                     Vector2::new(x, y),
                     rigid_body.position().rotation.angle(),
+                ));
+            }
+        }
+    }
+
+    pub fn set_sensor_position(&mut self, sensor: &AttachedSensor, x: N, y: N) {
+        if let Some(handle) = sensor.handle {
+            if let (Some(parent), Some(collider)) = (
+                self.bodies.rigid_body(handle.0),
+                self.colliders.get_mut(handle.1),
+            ) {
+                collider.set_position(Isometry2::new(
+                    parent.position().translation.vector + Vector2::new(x, y),
+                    collider.position().rotation.angle(),
                 ));
             }
         }
@@ -264,9 +278,10 @@ impl<'s> System<'s> for PhysicsSpawningSystem {
                 if parent.entity == entity {
                     if let Some(handle) = handles.get(entity) {
                         if attached.handle.is_none() {
+                            println!("Adding sensor!");
                             let sensor_handle =
                                 physics.add_child_collider(handle, &attached.collider);
-                            attached.set_handle(sensor_handle);
+                            attached.set_handle((handle.body.unwrap(), sensor_handle));
                         }
                     }
                 }
