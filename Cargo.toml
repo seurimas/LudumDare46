@@ -1,0 +1,20 @@
+[package]
+name = "0812_topdown_physics"
+version = "0.1.0"
+authors = []
+edition = "2018"
+
+[dependencies]
+amethyst = "0.15.0"
+nalgebra = "0.19"
+ncollide2d = "0.21"
+nphysics2d = "0.13"
+imgui = "0.2"
+amethyst-imgui = { git = "https://github.com/mbStavola/amethyst-imgui.git", branch = "amethyst-0.15" }
+serde = { version = "1.0", features = ["derive"] }
+
+[features]
+empty = ["amethyst/empty"]
+metal = ["amethyst/metal"]
+vulkan = ["amethyst/vulkan"]
+default = ["vulkan"]
