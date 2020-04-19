@@ -14,6 +14,7 @@ pub enum HitType {
 pub struct AttackHitbox {
     pub id: usize,
     pub hit_type: HitType,
+    pub damage: usize,
 }
 
 #[derive(Component, Debug)]
@@ -32,6 +33,7 @@ impl AttackHitboxSystem {
         physics: &mut Physics<f32>,
         health: &mut Health,
         player: &mut Player,
+        attack: &AttackHitbox,
         hitbox_physics: &PhysicsHandle,
         player_physics: &PhysicsHandle,
     ) {
@@ -42,12 +44,18 @@ impl AttackHitboxSystem {
             );
             player.state = PlayerState::Hit(0.5);
         }
+        if health.current_health < attack.damage {
+            health.current_health = 0;
+        } else {
+            health.current_health = health.current_health - attack.damage;
+        }
     }
     fn hit_goblin(
         &self,
         physics: &mut Physics<f32>,
         health: &mut Health,
         goblin: &mut Goblin,
+        attack: &AttackHitbox,
         hitbox_physics: &PhysicsHandle,
         goblin_physics: &PhysicsHandle,
     ) {
@@ -57,6 +65,11 @@ impl AttackHitboxSystem {
                 Direction::long_seek(direction).tilts() * -60.0,
             );
             goblin.state = GoblinState::Hit(0.5);
+        }
+        if health.current_health < attack.damage {
+            health.current_health = 0;
+        } else {
+            health.current_health = health.current_health - attack.damage;
         }
     }
 }
@@ -95,14 +108,13 @@ impl<'s> System<'s> for AttackHitboxSystem {
                     (handles.get(hit_entity), healths.get_mut(hit_entity))
                 {
                     if health.last_attack != hitbox.id {
-                        println!("New contact!");
-                        println!("{:?} {:?}", health.friendly, hitbox.hit_type);
                         health.last_attack = hitbox.id;
                         if let Some(mut player) = players.get_mut(hit_entity) {
                             self.hit_player(
                                 &mut physics,
                                 &mut health,
                                 &mut player,
+                                &hitbox,
                                 &handle,
                                 &hit_handle,
                             );
@@ -112,12 +124,28 @@ impl<'s> System<'s> for AttackHitboxSystem {
                                 &mut physics,
                                 &mut health,
                                 &mut goblin,
+                                &hitbox,
                                 &handle,
                                 &hit_handle,
                             );
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+struct NpcDeathSystem;
+impl<'s> System<'s> for NpcDeathSystem {
+    type SystemData = (Entities<'s>, ReadStorage<'s, Health>, Read<'s, LazyUpdate>);
+
+    fn run(&mut self, (entities, healths, lazy): Self::SystemData) {
+        for (entity, health) in (&entities, &healths).join() {
+            if health.current_health == 0 {
+                lazy.exec(move |world| {
+                    world.delete_entity(entity);
+                });
             }
         }
     }
@@ -132,6 +160,7 @@ impl<'a, 'b> SystemBundle<'a, 'b> for CombatBundle {
         dispatcher: &mut DispatcherBuilder<'a, 'b>,
     ) -> Result<(), Error> {
         dispatcher.add(AttackHitboxSystem, "attack_hitbox", &["physics"]);
+        dispatcher.add(NpcDeathSystem, "npc_death", &[]);
         Ok(())
     }
 }

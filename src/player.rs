@@ -88,6 +88,7 @@ fn spawn_attack_sensor(builder: LazyBuilder, player: Entity, direction: Directio
         .with(AttackHitbox {
             id: rand::random(),
             hit_type: HitType::FriendlyAttack,
+            damage: 1,
         })
         .with(Parent { entity: player })
         .named(ATTACK_SENSOR_NAME)
@@ -185,7 +186,6 @@ impl<'s> System<'s> for PlayerAttackSystem {
                         if let Some(sensor) =
                             get_named_entity(&entities, &names, ATTACK_SENSOR_NAME)
                         {
-                            println!("Deleting...");
                             lazy.exec(move |world| {
                                 world.delete_entity(sensor);
                             });
@@ -209,19 +209,6 @@ impl<'s> System<'s> for PlayerAttackSystem {
                     }
                     PlayerState::Attacking(attack_id) => {
                         if let Some(AnimationId::Attack(_)) = get_active_animation(control_set) {
-                            if let Some(sensor) =
-                                get_named_entity(&entities, &names, ATTACK_SENSOR_NAME)
-                            {
-                                attacks
-                                    .insert(
-                                        sensor,
-                                        AttackHitbox {
-                                            id: attack_id,
-                                            hit_type: HitType::FriendlyAttack,
-                                        },
-                                    )
-                                    .unwrap();
-                            }
                         } else {
                             player.state = PlayerState::Moving;
                             set_active_animation(

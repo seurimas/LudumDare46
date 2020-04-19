@@ -31,7 +31,7 @@ fn spawn_crab(prefabs: &PrefabStorage, player_builder: LazyBuilder) -> Entity {
         })
         .with(Health {
             friendly: false,
-            current_health: 100,
+            current_health: 3,
             last_attack: 0,
         })
         .with(transform)
@@ -53,6 +53,7 @@ fn spawn_goblin_attack_sensor(
         .with(AttackHitbox {
             id: rand::random(),
             hit_type: HitType::EnemyAttack,
+            damage: 1,
         })
         .with(Parent { entity: goblin })
         .build()
@@ -283,24 +284,6 @@ impl<'s> System<'s> for GoblinAiSystem {
                                     handle,
                                     goblin.facing.tilts() * goblin.lunge_speed,
                                 );
-                                for (_, sensor) in
-                                    get_sensors(&entities, &sensors, &parents, entity)
-                                {
-                                    attacks
-                                        .insert(
-                                            sensor,
-                                            AttackHitbox {
-                                                id: attack_id,
-                                                hit_type: HitType::EnemyAttack,
-                                            },
-                                        )
-                                        .unwrap();
-                                    if let Some(sensor) = sensors.get(sensor) {
-                                        let offset = goblin.facing.tilts() * 4.0
-                                            + goblin.facing.clockwise().tilts() * 4.0;
-                                        physics.set_sensor_position(sensor, offset.x, offset.y);
-                                    }
-                                }
                             } else {
                                 physics.set_velocity(handle, Vector2::zeros());
                             }

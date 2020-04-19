@@ -70,7 +70,15 @@ fn initialize_fence_post(world: &mut World, transform: Transform, parent: Entity
         .build();
 }
 
-fn get_map(world: &World) -> (WorldTiles, (u32, u32), (u32, u32)) {
+fn get_map(
+    world: &World,
+) -> (
+    WorldTiles,
+    tiled::Tileset,
+    WorldTiles,
+    (u32, u32),
+    (u32, u32),
+) {
     let maps = world.read_resource::<MapStorage>();
     let map_assets = world.read_resource::<AssetStorage<TiledMap>>();
     let tiled_map = map_assets.get(&maps.village_map).unwrap();
@@ -82,13 +90,36 @@ fn get_map(world: &World) -> (WorldTiles, (u32, u32), (u32, u32)) {
             map_size,
             tile_size,
         },
+        tiled_map.0.tilesets.get(0).unwrap().clone(),
+        WorldTiles {
+            layer0: tiled_map.0.layers.get(1).unwrap().tiles.clone(),
+            map_size,
+            tile_size,
+        },
         map_size,
         tile_size,
     )
 }
 
+fn tile_type(tileset: &tiled::Tileset, tile_id: usize) -> String {
+    for tile in tileset.tiles.iter() {
+        if tile.id == tile_id as u32 {
+            if let Some(tile_type) = &tile.tile_type {
+                return tile_type.to_string();
+            } else {
+                return "".to_string();
+            }
+        }
+    }
+    "".to_string()
+}
+
+fn is_fence(tileset: &tiled::Tileset, tile_id: usize) -> bool {
+    tile_type(tileset, tile_id).eq("f")
+}
+
 pub fn initialize_tile_world(world: &mut World) {
-    let (map, map_size, tile_size) = get_map(world);
+    let (map, tileset, obj_map, map_size, tile_size) = get_map(world);
     let tile_spritesheet = {
         let sprites = world.read_resource::<SpriteStorage>();
         sprites.tile_spritesheet.clone()
@@ -104,13 +135,17 @@ pub fn initialize_tile_world(world: &mut World) {
         .build();
     for y in 0..map_size.1 {
         for x in 0..map_size.0 {
-            if map.get_id(x as usize, y as usize) == Some(1) {
-                let mut transform = Transform::default();
-                let x = (x * tile_size.0) as f32 - (tile_size.0 as f32 * map_size.0 as f32 / 2.0);
-                let y =
-                    ((y + 1) * tile_size.1) as f32 - (tile_size.1 as f32 * map_size.1 as f32 / 2.0);
-                transform.set_translation_xyz(x, y, 0.0);
-                initialize_fence_post(world, transform, map_entity);
+            let tx = (x * tile_size.0) as f32 - (tile_size.0 as f32 * map_size.0 as f32 / 2.0);
+            let ty = (tile_size.1 as f32 * map_size.1 as f32 / 2.0) - (y * tile_size.1) as f32;
+            if let Some(tile_id) = map.get_id(x as usize, y as usize) {
+                if is_fence(&tileset, tile_id) {
+                    let mut transform = Transform::default();
+                    transform.set_translation_xyz(tx, ty, 0.0);
+                    initialize_fence_post(world, transform, map_entity);
+                }
+            }
+            if let Some(obj_id) = obj_map.get_id(x as usize, y as usize) {
+                println!("{}, {}", x, y);
             }
         }
     }
