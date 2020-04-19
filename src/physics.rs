@@ -337,8 +337,10 @@ impl<N: RealField> Physics<N> {
 
 impl<N: RealField> Default for Physics<N> {
     fn default() -> Self {
+        let mut mech_world = DefaultMechanicalWorld::new(Vector2::new(N::zero(), N::zero()));
+        mech_world.set_timestep(N::from_f32(1.0 / 30.0).unwrap());
         Self {
-            mech_world: DefaultMechanicalWorld::new(Vector2::new(N::zero(), N::zero())),
+            mech_world,
             geo_world: DefaultGeometricalWorld::new(),
             bodies: DefaultBodySet::new(),
             colliders: DefaultColliderSet::new(),
@@ -395,6 +397,7 @@ impl<'s> System<'s> for PhysicsSpawningSystem {
                 let phys_handle = PhysicsHandle::new(handle, collider_handle);
                 if let Some(transform) = transforms.get(entity) {
                     let translation = transform.translation();
+                    println!("S {} {}", translation.x, translation.y);
                     physics.set_location(&phys_handle, translation.x as f32, translation.y as f32);
                 } else {
                     transforms.insert(entity, Transform::default());

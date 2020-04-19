@@ -2,8 +2,9 @@ use crate::enemies::*;
 use crate::physics::*;
 use crate::player::*;
 use crate::prelude::*;
+use amethyst::ui::{UiFinder, UiTransform};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum HitType {
     FriendlyAttack,
     EnemyAttack,
@@ -22,12 +23,40 @@ pub struct AttackHitbox {
 pub struct Health {
     pub friendly: bool,
     pub current_health: usize,
-    pub last_attack: usize,
+    pub hit_by: Vec<usize>,
 }
+
+impl Health {
+    pub fn new(friendly: bool, current_health: usize) -> Self {
+        Health {
+            friendly,
+            current_health,
+            hit_by: Vec::new(),
+        }
+    }
+}
+
+pub const MAX_PLAYER_HEALTH: usize = 16;
+pub const MAX_PYLON_HEALTH: usize = 32;
 
 struct AttackHitboxSystem;
 
 impl AttackHitboxSystem {
+    fn hit_pylon(
+        &self,
+        physics: &mut Physics<f32>,
+        health: &mut Health,
+        pylon: &mut Pylon,
+        attack: &AttackHitbox,
+        hitbox_physics: &PhysicsHandle,
+        player_physics: &PhysicsHandle,
+    ) {
+        if health.current_health < attack.damage {
+            health.current_health = 0;
+        } else {
+            health.current_health = health.current_health - attack.damage;
+        }
+    }
     fn hit_player(
         &self,
         physics: &mut Physics<f32>,
@@ -64,7 +93,7 @@ impl AttackHitboxSystem {
                 goblin_physics,
                 Direction::long_seek(direction).tilts() * -60.0,
             );
-            goblin.state = GoblinState::Hit(0.5);
+            goblin.state = GoblinState::Hit(goblin.state.get_waypoint(), 0.5);
         }
         if health.current_health < attack.damage {
             health.current_health = 0;
@@ -83,6 +112,7 @@ impl<'s> System<'s> for AttackHitboxSystem {
         WriteStorage<'s, Health>,
         WriteStorage<'s, Player>,
         WriteStorage<'s, Goblin>,
+        WriteStorage<'s, Pylon>,
         ReadStorage<'s, AttackHitbox>,
         Entities<'s>,
     );
@@ -97,6 +127,7 @@ impl<'s> System<'s> for AttackHitboxSystem {
             mut healths,
             mut players,
             mut goblins,
+            mut pylons,
             hitboxes,
             entities,
         ): Self::SystemData,
@@ -107,13 +138,26 @@ impl<'s> System<'s> for AttackHitboxSystem {
                 if let (Some(hit_handle), Some(mut health)) =
                     (handles.get(hit_entity), healths.get_mut(hit_entity))
                 {
-                    if health.last_attack != hitbox.id {
-                        health.last_attack = hitbox.id;
+                    if !health.hit_by.contains(&hitbox.id)
+                        && ((health.friendly && hitbox.hit_type == HitType::EnemyAttack)
+                            || (!health.friendly && hitbox.hit_type == HitType::FriendlyAttack))
+                    {
+                        health.hit_by.push(hitbox.id);
                         if let Some(mut player) = players.get_mut(hit_entity) {
                             self.hit_player(
                                 &mut physics,
                                 &mut health,
                                 &mut player,
+                                &hitbox,
+                                &handle,
+                                &hit_handle,
+                            );
+                        }
+                        if let Some(mut pylon) = pylons.get_mut(hit_entity) {
+                            self.hit_pylon(
+                                &mut physics,
+                                &mut health,
+                                &mut pylon,
                                 &hitbox,
                                 &handle,
                                 &hit_handle,
@@ -151,6 +195,37 @@ impl<'s> System<'s> for NpcDeathSystem {
     }
 }
 
+const WIDTH_PER_HEALTH: f32 = 128.0 / MAX_PLAYER_HEALTH as f32;
+const WIDTH_PER_PYLON: f32 = 128.0 / MAX_PYLON_HEALTH as f32;
+
+pub struct HealthDisplaySystem;
+
+impl<'s> System<'s> for HealthDisplaySystem {
+    type SystemData = (
+        ReadStorage<'s, Pylon>,
+        ReadStorage<'s, Player>,
+        ReadStorage<'s, Health>,
+        WriteStorage<'s, UiTransform>,
+        Entities<'s>,
+    );
+    fn run(&mut self, (pylons, players, healths, mut transforms, entities): Self::SystemData) {
+        if let Some((player, health)) = (&players, &healths).join().next() {
+            for (transform) in (&mut transforms).join() {
+                if transform.id.eq("full_health") {
+                    transform.width = WIDTH_PER_HEALTH * health.current_health as f32;
+                }
+            }
+        }
+        if let Some((pylon, health)) = (&pylons, &healths).join().next() {
+            for (transform) in (&mut transforms).join() {
+                if transform.id.eq("full_pylon") {
+                    transform.width = WIDTH_PER_HEALTH * health.current_health as f32;
+                }
+            }
+        }
+    }
+}
+
 pub struct CombatBundle;
 
 impl<'a, 'b> SystemBundle<'a, 'b> for CombatBundle {
@@ -159,6 +234,7 @@ impl<'a, 'b> SystemBundle<'a, 'b> for CombatBundle {
         _world: &mut World,
         dispatcher: &mut DispatcherBuilder<'a, 'b>,
     ) -> Result<(), Error> {
+        dispatcher.add(HealthDisplaySystem, "health_bar", &[]);
         dispatcher.add(AttackHitboxSystem, "attack_hitbox", &["physics"]);
         dispatcher.add(NpcDeathSystem, "npc_death", &[]);
         Ok(())

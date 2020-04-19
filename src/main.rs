@@ -49,51 +49,77 @@ use std::f32::consts::PI;
 use world::*;
 
 #[derive(Default)]
-struct MyState {
-    map_progress: Option<ProgressCounter>,
+struct LoadingState {
+    progress: Option<ProgressCounter>,
+    assets: Option<(SpriteStorage, PrefabStorage, SoundStorage, MapStorage)>,
 }
 
-impl SimpleState for MyState {
+struct GameplayState {
+    assets: (SpriteStorage, PrefabStorage, SoundStorage, MapStorage),
+}
+impl SimpleState for GameplayState {
+    fn on_start(&mut self, mut data: StateData<'_, GameData<'_, '_>>) {
+        data.world.insert(self.assets.0.clone());
+        data.world.insert(self.assets.1.clone());
+        data.world.insert(self.assets.2.clone());
+        data.world.insert(self.assets.3.clone());
+        initialize_tile_world(data.world);
+        data.world.exec(|mut creator: UiCreator<'_>| {
+            creator.create(get_resource("hud.ron"), ());
+        });
+    }
+}
+
+impl SimpleState for LoadingState {
     fn on_start(&mut self, mut data: StateData<'_, GameData<'_, '_>>) {
         data.world.register::<PhysicsHandle>();
-
-        let tile_spritesheet = load_spritesheet(data.world, get_resource("Tiles"));
-        data.world.insert(SpriteStorage { tile_spritesheet });
-
-        let player_prefab = load_prefab(data.world, get_resource("Player.ron"));
-        let crab_prefab = load_prefab(data.world, get_resource("Enemies1.ron"));
-        data.world.insert(PrefabStorage {
-            player: player_prefab,
-            crab: crab_prefab,
-        });
-
-        let bounce_wav = load_sound_file(data.world, get_resource("bounce.wav"));
-        data.world.insert(SoundStorage { bounce_wav });
-
         data.world.insert(AssetStorage::<TiledMap>::default());
+
         let mut progress_counter = ProgressCounter::new();
+
+        let tile_spritesheet =
+            load_spritesheet(data.world, get_resource("Tiles"), &mut progress_counter);
+        let player_prefab = load_prefab(
+            data.world,
+            get_resource("Player.ron"),
+            &mut progress_counter,
+        );
+        let crab_prefab = load_prefab(
+            data.world,
+            get_resource("Enemies1.ron"),
+            &mut progress_counter,
+        );
+        let bounce_wav = load_sound_file(
+            data.world,
+            get_resource("bounce.wav"),
+            &mut progress_counter,
+        );
+
         let village_map = load_map(
             data.world,
             get_resource("Village.tmx"),
             &mut progress_counter,
         );
-        self.map_progress = Some(progress_counter);
-        data.world.insert(MapStorage { village_map });
 
-        spawn_player_world(&mut data.world);
-        spawn_crab_world(&mut data.world);
-        data.world.exec(|mut creator: UiCreator<'_>| {
-            creator.create(get_resource("hud.ron"), ());
-        });
+        self.progress = Some(progress_counter);
+        self.assets = Some((
+            SpriteStorage { tile_spritesheet },
+            PrefabStorage {
+                player: player_prefab,
+                crab: crab_prefab,
+            },
+            SoundStorage { bounce_wav },
+            MapStorage { village_map },
+        ));
     }
 
     fn update(&mut self, data: &mut StateData<GameData>) -> SimpleTrans {
-        if let Some(map_progress) = &self.map_progress {
-            println!("{:?}", map_progress);
-            if map_progress.is_complete() {
-                println!("Spawning map!");
-                self.map_progress = None;
-                initialize_tile_world(&mut data.world);
+        if let Some(progress) = &self.progress {
+            println!("{:?}", progress);
+            if progress.is_complete() {
+                return SimpleTrans::Switch(Box::new(GameplayState {
+                    assets: self.assets.clone().unwrap(),
+                }));
             }
         }
         SimpleTrans::None
@@ -220,7 +246,7 @@ fn main() -> amethyst::Result<()> {
         .with_barrier()
         .with(ImguiDebugSystem::default(), "imgui_demo", &[]);
 
-    let mut game = Application::new(resources_dir, MyState::default(), game_data)?;
+    let mut game = Application::new(resources_dir, LoadingState::default(), game_data)?;
     game.run();
 
     Ok(())

@@ -1,39 +1,43 @@
-use crate::assets::{AnimationId, Direction, PrefabStorage};
+use crate::assets::{AnimationId, Direction, MyPrefabData, PrefabStorage};
 use crate::combat::*;
 use crate::physics::*;
 use crate::prelude::*;
 use amethyst::{
     animation::*,
+    assets::{Handle, Prefab},
     core::{bundle::SystemBundle, timing::Time, transform::*},
     ecs::world::LazyBuilder,
     renderer::SpriteRender,
+    ui::{UiText, UiTransform},
 };
 use na::Isometry2;
 use ncollide2d::shape::*;
 use nphysics2d::object::*;
 
-fn spawn_crab(prefabs: &PrefabStorage, player_builder: LazyBuilder) -> Entity {
+fn spawn_crab(
+    prefab: Handle<Prefab<MyPrefabData>>,
+    player_builder: EntityBuilder,
+    x: f32,
+    y: f32,
+    waypoint: &Entity,
+) -> Entity {
     let shape = ShapeHandle::new(Ball::new(8.0));
     let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).mass(1.0);
     let collider = ColliderDesc::new(shape);
     let mut transform = Transform::default();
-    transform.set_translation_xyz(0.0, 64.0, 1.0);
+    transform.set_translation_xyz(x, y, 1.0);
     player_builder
         .with(PhysicsDesc::new(body, collider))
-        .with(prefabs.crab.clone())
+        .with(prefab)
         .with(Goblin {
             walk_speed: 40.0,
-            state: GoblinState::Idling(5.0),
+            state: GoblinState::Idling(waypoint.clone(), 5.0),
             facing: Direction::South,
-            attack_distance: 50.0,
+            attack_distance: 60.0,
             lunge_speed: 120.0,
-            chase_distance: 75.0,
+            chase_distance: 60.0,
         })
-        .with(Health {
-            friendly: false,
-            current_health: 3,
-            last_attack: 0,
-        })
+        .with(Health::new(false, 3))
         .with(transform)
         .build()
 }
@@ -59,21 +63,69 @@ fn spawn_goblin_attack_sensor(
         .build()
 }
 
-pub fn spawn_crab_world(world: &mut World) {
-    let entities = world.entities();
-    let update = world.write_resource::<LazyUpdate>();
-    let builder = update.create_entity(&entities);
-    let prefabs = world.read_resource::<PrefabStorage>();
-    let crab = spawn_crab(&prefabs, builder);
+fn spawn_spawner(player_builder: EntityBuilder, x: f32, y: f32, waypoint: &Entity) -> Entity {
+    let mut transform = Transform::default();
+    transform.set_translation_xyz(x, y, 1.0);
+    player_builder
+        .with(transform)
+        .with(GoblinSpawner {
+            waypoint: *waypoint,
+        })
+        .build()
+}
+
+fn spawn_waypoint(player_builder: EntityBuilder, x: f32, y: f32) -> Entity {
+    let shape = ShapeHandle::new(Ball::new(4.0));
+    let body = RigidBodyDesc::new().status(BodyStatus::Static);
+    let collider = ColliderDesc::new(shape).sensor(true);
+    let mut transform = Transform::default();
+    transform.set_translation_xyz(x, y, 1.0);
+    player_builder
+        .with(PhysicsDesc::new(body, collider))
+        .with(transform)
+        .with(Waypoint {
+            next: None,
+            margin: 8.0,
+        })
+        .build()
+}
+
+pub fn spawn_waypoint_world(world: &mut World, x: f32, y: f32) -> Entity {
+    spawn_waypoint(world.create_entity(), x, y)
+}
+
+pub fn spawn_spawner_world(world: &mut World, x: f32, y: f32, waypoint: &Entity) -> Entity {
+    spawn_spawner(world.create_entity(), x, y, waypoint)
+}
+
+pub fn spawn_goblin_world(world: &mut World, x: f32, y: f32, waypoint: &Entity) -> Entity {
+    let prefab = {
+        let prefabs = world.read_resource::<PrefabStorage>();
+        prefabs.crab.clone()
+    };
+    let builder = world.create_entity();
+    spawn_crab(prefab, builder, x, y, waypoint)
 }
 
 #[derive(Debug, PartialEq)]
 pub enum GoblinState {
-    Idling(f32),
-    Moving(f32),
-    Chasing(Entity),
-    Attacking(usize, f32),
-    Hit(f32),
+    Idling(Entity, f32),
+    Moving(Entity),
+    Chasing(Entity, Entity),
+    Attacking(Entity, usize, f32),
+    Hit(Entity, f32),
+}
+
+impl GoblinState {
+    pub fn get_waypoint(&self) -> Entity {
+        match self {
+            GoblinState::Idling(waypoint, _) => *waypoint,
+            GoblinState::Moving(waypoint) => *waypoint,
+            GoblinState::Chasing(waypoint, _) => *waypoint,
+            GoblinState::Attacking(waypoint, _, _) => *waypoint,
+            GoblinState::Hit(waypoint, _) => *waypoint,
+        }
+    }
 }
 
 #[derive(Component, Debug)]
@@ -87,6 +139,19 @@ pub struct Goblin {
     pub attack_distance: f32,
 }
 
+#[derive(Component, Debug)]
+#[storage(VecStorage)]
+pub struct GoblinSpawner {
+    pub waypoint: Entity,
+}
+
+#[derive(Component, Debug)]
+#[storage(VecStorage)]
+pub struct Waypoint {
+    pub next: Option<Entity>,
+    pub margin: f32,
+}
+
 struct GoblinAiSystem;
 impl GoblinAiSystem {
     fn should_chase<'s>(
@@ -98,7 +163,38 @@ impl GoblinAiSystem {
         goblin: &Goblin,
         goblin_handle: &PhysicsHandle,
     ) -> Option<Entity> {
-        get_named_entity(entities, names, "player")
+        self.should_chase_name(
+            &physics,
+            &handles,
+            &entities,
+            &names,
+            "pylon",
+            &goblin,
+            &goblin_handle,
+        )
+        .or_else(|| {
+            self.should_chase_name(
+                &physics,
+                &handles,
+                &entities,
+                &names,
+                "player",
+                &goblin,
+                &goblin_handle,
+            )
+        })
+    }
+    fn should_chase_name<'s>(
+        &self,
+        physics: &Physics<f32>,
+        handles: &ReadStorage<'s, PhysicsHandle>,
+        entities: &Entities<'s>,
+        names: &ReadStorage<'s, Named>,
+        name: &'static str,
+        goblin: &Goblin,
+        goblin_handle: &PhysicsHandle,
+    ) -> Option<Entity> {
+        get_named_entity(entities, names, name)
             .and_then(|player_entity| {
                 handles
                     .get(player_entity)
@@ -118,6 +214,23 @@ impl GoblinAiSystem {
                     None
                 }
             })
+    }
+    fn get_waypoint<'s>(
+        &self,
+        physics: &Physics<f32>,
+        goblin_handle: &PhysicsHandle,
+        waypoint_handle: &PhysicsHandle,
+        current: &Waypoint,
+    ) -> Option<Entity> {
+        if let Some(distance) = physics.get_between(waypoint_handle, goblin_handle) {
+            if distance.x * distance.x + distance.y * distance.y < current.margin {
+                current.next
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     fn walk(
@@ -146,6 +259,7 @@ impl<'s> System<'s> for GoblinAiSystem {
         Write<'s, Physics<f32>>,
         Read<'s, Time>,
         ReadStorage<'s, Named>,
+        ReadStorage<'s, Waypoint>,
         ReadStorage<'s, AttachedSensor>,
         ReadStorage<'s, Parent>,
         ReadStorage<'s, PhysicsHandle>,
@@ -163,6 +277,7 @@ impl<'s> System<'s> for GoblinAiSystem {
             mut physics,
             time,
             names,
+            waypoints,
             sensors,
             parents,
             handles,
@@ -180,11 +295,11 @@ impl<'s> System<'s> for GoblinAiSystem {
                 get_animation_set(&mut control_sets, entity),
             ) {
                 match goblin.state {
-                    GoblinState::Moving(time_left) => {
+                    GoblinState::Moving(target) => {
                         if let Some(player) = self
                             .should_chase(&physics, &handles, &entities, &names, &goblin, &handle)
                         {
-                            goblin.state = GoblinState::Chasing(player);
+                            goblin.state = GoblinState::Chasing(target, player);
                         } else {
                             self.walk(
                                 goblin.facing,
@@ -194,15 +309,22 @@ impl<'s> System<'s> for GoblinAiSystem {
                                 &mut control_set,
                                 &animation_set,
                             );
-                            if time_left < time.delta_seconds() {
-                                goblin.state = GoblinState::Idling(2.0);
-                            } else {
-                                goblin.state =
-                                    GoblinState::Moving(time_left - time.delta_seconds());
+                            if let Some(waypoint_handle) = handles.get(target) {
+                                if let Some(next) = self.get_waypoint(
+                                    &physics,
+                                    waypoint_handle,
+                                    handle,
+                                    waypoints.get(target).unwrap(),
+                                ) {
+                                    goblin.state = GoblinState::Moving(next);
+                                } else {
+                                    let offset = physics.get_between(handle, waypoint_handle);
+                                    goblin.facing = Direction::short_seek(offset.unwrap(), 4.0);
+                                }
                             }
                         }
                     }
-                    GoblinState::Idling(time_left) => {
+                    GoblinState::Idling(waypoint, time_left) => {
                         for (_, sensor) in get_sensors(&entities, &sensors, &parents, entity).iter()
                         {
                             let sensor = *sensor;
@@ -216,7 +338,7 @@ impl<'s> System<'s> for GoblinAiSystem {
                             .should_chase(&physics, &handles, &entities, &names, &goblin, &handle)
                             .and_then(|player| if time_left < 2.0 { Some(player) } else { None })
                         {
-                            goblin.state = GoblinState::Chasing(player);
+                            goblin.state = GoblinState::Chasing(waypoint, player);
                         } else {
                             physics.set_velocity(handle, Vector2::zeros());
                             set_active_animation(
@@ -227,15 +349,14 @@ impl<'s> System<'s> for GoblinAiSystem {
                                 1.0,
                             );
                             if time_left < time.delta_seconds() {
-                                goblin.state = GoblinState::Moving(2.0);
-                                goblin.facing = Direction::pick();
+                                goblin.state = GoblinState::Moving(waypoint);
                             } else {
                                 goblin.state =
-                                    GoblinState::Idling(time_left - time.delta_seconds());
+                                    GoblinState::Idling(waypoint, time_left - time.delta_seconds());
                             }
                         }
                     }
-                    GoblinState::Chasing(player) => {
+                    GoblinState::Chasing(waypoint, player) => {
                         if let Some(player_handle) = handles.get(player) {
                             let mut found = false;
                             for direction in Direction::vec() {
@@ -250,7 +371,8 @@ impl<'s> System<'s> for GoblinAiSystem {
                                             EndControl::Stay,
                                             1.0,
                                         );
-                                        goblin.state = GoblinState::Attacking(rand::random(), 0.0);
+                                        goblin.state =
+                                            GoblinState::Attacking(waypoint, rand::random(), 0.0);
                                         goblin.facing = direction;
                                         spawn_goblin_attack_sensor(
                                             lazy.create_entity(&entities),
@@ -274,10 +396,10 @@ impl<'s> System<'s> for GoblinAiSystem {
                                 }
                             }
                         } else {
-                            goblin.state = GoblinState::Idling(4.0);
+                            goblin.state = GoblinState::Idling(waypoint, 4.0);
                         }
                     }
-                    GoblinState::Attacking(attack_id, progress) => {
+                    GoblinState::Attacking(waypoint, attack_id, progress) => {
                         if let Some(AnimationId::Attack(_)) = get_active_animation(control_set) {
                             if progress > 0.375 {
                                 physics.set_velocity(
@@ -287,17 +409,20 @@ impl<'s> System<'s> for GoblinAiSystem {
                             } else {
                                 physics.set_velocity(handle, Vector2::zeros());
                             }
-                            goblin.state =
-                                GoblinState::Attacking(attack_id, progress + time.delta_seconds());
+                            goblin.state = GoblinState::Attacking(
+                                waypoint,
+                                attack_id,
+                                progress + time.delta_seconds(),
+                            );
                         } else {
-                            goblin.state = GoblinState::Idling(4.0);
+                            goblin.state = GoblinState::Idling(waypoint, 4.0);
                         }
                     }
-                    GoblinState::Hit(size) => {
+                    GoblinState::Hit(waypoint, size) => {
                         if size < time.delta_seconds() {
-                            goblin.state = GoblinState::Idling(3.0);
+                            goblin.state = GoblinState::Idling(waypoint, 3.0);
                         } else {
-                            goblin.state = GoblinState::Hit(size - time.delta_seconds());
+                            goblin.state = GoblinState::Hit(waypoint, size - time.delta_seconds());
                             set_active_animation(
                                 control_set,
                                 AnimationId::Staggered(goblin.facing),
@@ -315,6 +440,66 @@ impl<'s> System<'s> for GoblinAiSystem {
         }
     }
 }
+pub struct WaveSystem {
+    idle_time: f32,
+    wave_num: usize,
+}
+
+impl<'s> System<'s> for WaveSystem {
+    type SystemData = (
+        ReadStorage<'s, Goblin>,
+        Read<'s, LazyUpdate>,
+        ReadStorage<'s, UiTransform>,
+        WriteStorage<'s, UiText>,
+        Read<'s, Time>,
+        Entities<'s>,
+    );
+    fn run(&mut self, (goblins, lazy, transforms, mut ui_texts, time, entities): Self::SystemData) {
+        let mut goblin_count = 0;
+        for _goblin in (&goblins).join() {
+            goblin_count += 1;
+        }
+        if goblin_count == 0 {
+            self.idle_time += time.delta_seconds();
+        } else {
+            self.idle_time = 0.0;
+        }
+        for (transform, text) in (&transforms, &mut ui_texts).join() {
+            if transform.id.eq("goblin_count") {
+                if goblin_count > 0 {
+                    text.text = format!("Goblins Left: {}", goblin_count);
+                } else if self.idle_time < 15.0 {
+                    text.text = format!("Next wave in: {}", (15 - self.idle_time as usize));
+                }
+            }
+        }
+        if self.idle_time > 15.0 {
+            lazy.exec_mut(|world| {
+                let spawners = world.exec(
+                    |(entities, transforms, spawners): (
+                        Entities<'_>,
+                        ReadStorage<'_, Transform>,
+                        ReadStorage<'_, GoblinSpawner>,
+                    )| {
+                        let mut spawn_list = Vec::new();
+                        for (entity, transform, spawner) in
+                            (&entities, &transforms, &spawners).join()
+                        {
+                            let translation = transform.translation();
+                            spawn_list.push((translation.x, translation.y, spawner.waypoint));
+                            println!("{:?}", spawn_list);
+                        }
+                        spawn_list
+                    },
+                );
+                for (tx, ty, waypoint) in spawners.iter() {
+                    println!("{} {}", tx, ty);
+                    spawn_goblin_world(world, *tx, *ty, waypoint);
+                }
+            });
+        }
+    }
+}
 
 pub struct EnemiesBundle;
 
@@ -324,6 +509,14 @@ impl<'a, 'b> SystemBundle<'a, 'b> for EnemiesBundle {
         _world: &mut World,
         dispatcher: &mut DispatcherBuilder<'a, 'b>,
     ) -> Result<(), Error> {
+        dispatcher.add(
+            WaveSystem {
+                idle_time: 15.0,
+                wave_num: 1,
+            },
+            "waves",
+            &[],
+        );
         dispatcher.add(GoblinAiSystem, "goblin", &[]);
         Ok(())
     }

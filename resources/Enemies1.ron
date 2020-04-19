@@ -49,9 +49,6 @@ Prefab(
                         sheet: "enemy1",
                         sprite_number: 0,
                     ),
-		    transform: (
-		        translation: (0.0, 0.0, 0.0),
-		    ),
                 ),
                 // AnimationSetPrefab
                 animation_set: (

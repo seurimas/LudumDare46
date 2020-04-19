@@ -23,14 +23,14 @@ fn standard_camera() -> Camera {
     Camera::standard_2d(ARENA_WIDTH, ARENA_HEIGHT)
 }
 
-pub fn initialize_camera(builder: impl Builder, player: Entity) -> Entity {
+pub fn initialize_camera(builder: impl Builder, player: &Entity) -> Entity {
     // Setup camera in a way that our screen covers whole arena and (0, 0) is in the bottom left.
     let mut transform = Transform::default();
     transform.set_translation_xyz(0.0, 0.0, 1.0);
 
     builder
         .with(standard_camera())
-        .with(Parent { entity: player })
+        .with(Parent { entity: *player })
         .with(transform)
         .build()
 }
@@ -50,28 +50,45 @@ pub struct Player {
     pub facing: Direction,
 }
 
-fn spawn_player(prefabs: &PrefabStorage, player_builder: LazyBuilder) -> Entity {
+fn spawn_player(prefabs: &PrefabStorage, player_builder: LazyBuilder, x: f32, y: f32) -> Entity {
     let shape = ShapeHandle::new(Ball::new(8.0));
     let body = RigidBodyDesc::new()
         .status(BodyStatus::Dynamic)
         .mass(10.0)
         .linear_damping(0.0);
     let collider = ColliderDesc::new(shape);
+    let mut transform = Transform::default();
+    transform.set_translation_xyz(x, y, 1.0);
     player_builder
         .with(PhysicsDesc::new(body, collider))
         .with(prefabs.player.clone())
-        .with(Transform::default())
+        .with(transform)
         .with(Player {
             walk_speed: 100.0,
             state: PlayerState::Moving,
             facing: Direction::South,
         })
-        .with(Health {
-            friendly: true,
-            current_health: 100,
-            last_attack: 0,
-        })
+        .with(Health::new(true, MAX_PLAYER_HEALTH))
         .named("player")
+        .build()
+}
+
+#[derive(Component, Debug)]
+#[storage(VecStorage)]
+pub struct Pylon;
+
+fn spawn_pylon(prefabs: &PrefabStorage, player_builder: LazyBuilder, x: f32, y: f32) -> Entity {
+    let shape = ShapeHandle::new(Ball::new(44.0));
+    let body = RigidBodyDesc::new().status(BodyStatus::Static);
+    let collider = ColliderDesc::new(shape);
+    let mut transform = Transform::default();
+    transform.set_translation_xyz(x, y, 1.0);
+    player_builder
+        .with(PhysicsDesc::new(body, collider))
+        .with(transform)
+        .with(Pylon)
+        .with(Health::new(true, MAX_PYLON_HEALTH))
+        .named("pylon")
         .build()
 }
 
@@ -95,14 +112,23 @@ fn spawn_attack_sensor(builder: LazyBuilder, player: Entity, direction: Directio
         .build()
 }
 
-pub fn spawn_player_world(world: &mut World) {
+pub fn spawn_player_world(world: &mut World, x: f32, y: f32) -> Entity {
     let entities = world.entities();
     let update = world.write_resource::<LazyUpdate>();
     let builder = update.create_entity(&entities);
     let prefabs = world.read_resource::<PrefabStorage>();
-    let player = spawn_player(&prefabs, builder);
+    let player = spawn_player(&prefabs, builder, x, y);
     let builder = update.create_entity(&entities);
-    initialize_camera(builder, player);
+    initialize_camera(builder, &player);
+    player
+}
+
+pub fn spawn_pylon_world(world: &mut World, x: f32, y: f32) -> Entity {
+    let entities = world.entities();
+    let update = world.write_resource::<LazyUpdate>();
+    let builder = update.create_entity(&entities);
+    let prefabs = world.read_resource::<PrefabStorage>();
+    spawn_pylon(&prefabs, builder, x, y)
 }
 
 struct PlayerAnimationSystem;

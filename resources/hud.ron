@@ -2,7 +2,7 @@
 Container(
     transform: (
         id: "hud",
-        anchor: Middle,
+        anchor: TopMiddle,
         stretch: X( x_margin: 0.0 ),
 
         y: -60.,
@@ -15,28 +15,110 @@ Container(
         Container(
             transform: (
                 id: "hearts",
-                x: 50,
-	            y: 60,
-                width: 100.0,
-                height: 120.0,
+                x: 128,
+	        y: -32,
+                width: 128.0,
+                height: 32.0,
                 anchor: TopLeft,
             ),
 	        children: [
                 Image(
                     transform: (
-                        id: "heart0",
+                        id: "empty_health",
                         x: -8.,
                         y: 8.,
-                        width: 8.,
-                        height: 8.,
-                        anchor: MiddleLeft,
+			z: 1.0,
+                        width: 128.,
+                        height: 16.,
+                        anchor: Middle,
+                    ),
+                    image: PartialTexture(
+                        tex: File("sprites.png", ("IMAGE", ())),
+                        left: 0.,
+                        top: 0.0625,
+                        right: 0.25,
+                        bottom: 0.125,
+                    ),
+                ),
+                Image(
+                    transform: (
+                        id: "full_health",
+                        x: -8.,
+                        y: 8.,
+			z: 2.0,
+                        width: 128.,
+                        height: 16.,
+                        anchor: Middle,
                     ),
                     image: PartialTexture(
                         tex: File("sprites.png", ("IMAGE", ())),
                         left: 0.,
                         top: 0.,
-                        right: 0.03125,
-                        bottom: 0.03125,
+                        right: 0.25,
+                        bottom: 0.0625,
+                    ),
+                ),
+            ],
+        ),
+	Label(
+	    transform: (
+	        id: "goblin_count",
+		x: 0.,
+		y: -32.,
+		width: 200.,
+		height: 32.,
+		anchor: TopMiddle,
+	    ),
+	    text: (
+                text: "Goblins Left: 0",
+		font_size: 25.,
+		color: (0.9, 0.25, 0.3, 1.0),
+	    ),
+	),
+        Container(
+            transform: (
+                id: "pylon",
+                x: -128,
+	        y: -32,
+                width: 128.0,
+                height: 32.0,
+                anchor: TopRight,
+            ),
+	        children: [
+                Image(
+                    transform: (
+                        id: "empty_pylon",
+                        x: -8.,
+                        y: 8.,
+			z: 1.0,
+                        width: 256.,
+                        height: 16.,
+                        anchor: Middle,
+                    ),
+                    image: PartialTexture(
+                        tex: File("sprites.png", ("IMAGE", ())),
+                        left: 0.25,
+                        top: 0.0625,
+                        right: 0.75,
+                        bottom: 0.125,
+                    ),
+                ),
+                Image(
+                    transform: (
+                        id: "full_pylon",
+                        x: -8.,
+                        y: 8.,
+			z: 2.0,
+                        width: 256.,
+                        height: 16.,
+                        anchor: Middle,
+                    ),
+                    image: PartialTexture(
+                        tex: File("sprites.png", ("IMAGE", ())),
+                        left: 0.25,
+                        top: 0.,
+                        right: 0.75,
+                        bottom: 0.0625,
                     ),
                 ),
             ],
