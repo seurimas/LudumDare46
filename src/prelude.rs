@@ -2,7 +2,7 @@ pub use crate::assets::{AnimationId, Direction};
 pub use crate::physics::{AttachedSensor, PhysicsHandle};
 pub use amethyst::{
     animation::*,
-    core::{bundle::SystemBundle, transform::components::Parent, Named},
+    core::{bundle::SystemBundle, timing::Time, transform::components::Parent, Named},
     ecs::*,
     error::Error,
     prelude::*,

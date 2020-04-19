@@ -248,6 +248,70 @@ Prefab(
                                 ],
                             ),
                         ),
+                        (
+                            Staggered(East),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 1.0],
+                                            output: [6, 6],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+			),
+			(
+                            Staggered(North),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 1.0],
+                                            output: [7, 7],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+			),
+			(
+                            Staggered(West),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 1.0],
+                                            output: [14, 14],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+			),
+			(
+                            Staggered(South),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 1.0],
+                                            output: [15, 15],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
                     ],
                 ),
             ),

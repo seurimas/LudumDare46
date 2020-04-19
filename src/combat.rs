@@ -38,9 +38,9 @@ impl AttackHitboxSystem {
         if let Some(direction) = physics.get_between(player_physics, hitbox_physics) {
             physics.set_velocity(
                 player_physics,
-                Direction::long_seek(direction).tilts() * -140.0,
+                Direction::long_seek(direction).tilts() * -60.0,
             );
-            player.state = PlayerState::Hit;
+            player.state = PlayerState::Hit(0.5);
         }
     }
     fn hit_goblin(
@@ -54,9 +54,9 @@ impl AttackHitboxSystem {
         if let Some(direction) = physics.get_between(goblin_physics, hitbox_physics) {
             physics.set_velocity(
                 goblin_physics,
-                Direction::long_seek(direction).tilts() * -140.0,
+                Direction::long_seek(direction).tilts() * -60.0,
             );
-            goblin.state = GoblinState::Hit;
+            goblin.state = GoblinState::Hit(0.5);
         }
     }
 }
@@ -91,13 +91,12 @@ impl<'s> System<'s> for AttackHitboxSystem {
         for (_entity, sensor, hitbox) in (&entities, &sensors, &hitboxes).join() {
             let handle = sensor.get_handle();
             for hit_entity in physics.get_intersections(&handle) {
-                println!("HereA");
                 if let (Some(hit_handle), Some(mut health)) =
                     (handles.get(hit_entity), healths.get_mut(hit_entity))
                 {
-                    println!("Here");
                     if health.last_attack != hitbox.id {
                         println!("New contact!");
+                        println!("{:?} {:?}", health.friendly, hitbox.hit_type);
                         health.last_attack = hitbox.id;
                         if let Some(mut player) = players.get_mut(hit_entity) {
                             self.hit_player(
@@ -132,7 +131,7 @@ impl<'a, 'b> SystemBundle<'a, 'b> for CombatBundle {
         _world: &mut World,
         dispatcher: &mut DispatcherBuilder<'a, 'b>,
     ) -> Result<(), Error> {
-        dispatcher.add(AttackHitboxSystem, "attack_hitbox", &[]);
+        dispatcher.add(AttackHitboxSystem, "attack_hitbox", &["physics"]);
         Ok(())
     }
 }

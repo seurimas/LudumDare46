@@ -7,6 +7,7 @@ use amethyst::{
     audio::{output::Output, Source, SourceHandle},
     core::transform::{components::Parent, Transform},
 };
+use na19;
 use nalgebra::geometry::{Isometry2, Point2, Point3, UnitQuaternion};
 use nalgebra::{RealField, Vector2};
 use ncollide2d::pipeline::narrow_phase::ContactEvent;
@@ -38,6 +39,7 @@ impl PhysicsDesc {
 pub struct AttachedSensor {
     collider: ColliderDesc<f32>,
     pub handle: Option<(DefaultBodyHandle, DefaultColliderHandle)>,
+    fresh: bool,
 }
 
 impl AttachedSensor {
@@ -45,10 +47,12 @@ impl AttachedSensor {
         AttachedSensor {
             collider,
             handle: None,
+            fresh: false,
         }
     }
     pub fn set_handle(&mut self, handle: (DefaultBodyHandle, DefaultColliderHandle)) {
         self.handle = Some(handle);
+        self.fresh = true;
     }
     pub fn get_handle(&self) -> PhysicsHandle {
         if let Some(handle) = self.handle {
@@ -171,7 +175,7 @@ impl<N: RealField> Physics<N> {
                 self.bodies.rigid_body(handle.0),
                 self.colliders.get_mut(handle.1),
             ) {
-                collider.(Isometry2::new(
+                collider.set_position(Isometry2::new(
                     parent.position().translation.vector + Vector2::new(x, y),
                     collider.position().rotation.angle(),
                 ));
@@ -190,11 +194,40 @@ impl<N: RealField> Physics<N> {
         }
     }
 
+    pub fn get_velocity(&mut self, handle: &PhysicsHandle) -> Option<Vector2<N>> {
+        if let Some(handle) = handle.body {
+            if let Some(rigid_body) = self.bodies.rigid_body(handle) {
+                return Some(rigid_body.velocity().linear);
+            }
+        }
+        None
+    }
+
     pub fn set_velocity(&mut self, handle: &PhysicsHandle, vec: Vector2<N>) {
         if let Some(handle) = handle.body {
             if let Some(rigid_body) = self.bodies.rigid_body_mut(handle) {
                 rigid_body.set_linear_velocity(vec);
             }
+        }
+    }
+
+    pub fn set_damping(&mut self, handle: &PhysicsHandle, damping: N) {
+        if let Some(handle) = handle.body {
+            if let Some(rigid_body) = self.bodies.rigid_body_mut(handle) {
+                rigid_body.set_linear_damping(damping);
+            }
+        }
+    }
+
+    pub fn apply_velocity_change(&mut self, handle: &PhysicsHandle, vec: Vector2<N>) {
+        if let Some(handle) = handle.body {
+            if let Some(body) = self.bodies.get_mut(handle) {
+                body.apply_force(0, &Force::linear(vec), ForceType::VelocityChange, true)
+            } else {
+                panic!("HOLY SHIT");
+            }
+        } else {
+            panic!("NOLY SHIT");
         }
     }
 
@@ -290,6 +323,7 @@ impl<N: RealField> Physics<N> {
             for interference in self.geo_world.interferences_with_ray(
                 &self.colliders,
                 &Ray::<N>::new(center, direction),
+                N::from_f32(500.0).unwrap(),
                 &groups.unwrap_or_default(),
             ) {
                 if let Some(entity) = self.get_collider_entity(interference.0) {
@@ -393,6 +427,15 @@ impl<'s> System<'s> for PhysicsSpawningSystem {
                     }
                 }
                 handle.fresh = false;
+            }
+        }
+        for (entity, attached) in (&entities, &mut attached).join() {
+            if attached.fresh {
+                if let Some((_, coll_handle)) = attached.handle {
+                    if let Some(collider) = physics.colliders.get_mut(coll_handle) {
+                        collider.set_user_data(Some(Box::new(entity)));
+                    }
+                }
             }
         }
     }

@@ -167,8 +167,10 @@ impl Direction {
         }
     }
 
-    pub fn short_seek(offset: Vector2<f32>) -> Self {
-        if f32::abs(offset.x) > f32::abs(offset.y) {
+    pub fn short_seek(offset: Vector2<f32>, margin: f32) -> Self {
+        if f32::abs(offset.x) < margin || f32::abs(offset.y) < margin {
+            Direction::long_seek(offset)
+        } else if f32::abs(offset.x) > f32::abs(offset.y) {
             if offset.y > 0.0 {
                 Direction::North
             } else {
@@ -205,6 +207,7 @@ pub enum AnimationId {
     Walk(Direction),
     Attack(Direction),
     Idle(Direction),
+    Staggered(Direction),
 }
 
 impl AnimationId {
@@ -213,6 +216,7 @@ impl AnimationId {
             AnimationId::Walk(direction) => *direction,
             AnimationId::Attack(direction) => *direction,
             AnimationId::Idle(direction) => *direction,
+            AnimationId::Staggered(direction) => *direction,
         }
     }
 

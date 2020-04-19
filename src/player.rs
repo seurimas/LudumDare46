@@ -39,7 +39,7 @@ pub fn initialize_camera(builder: impl Builder, player: Entity) -> Entity {
 pub enum PlayerState {
     Moving,
     Attacking(usize),
-    Hit,
+    Hit(f32),
 }
 
 #[derive(Component, Debug)]
@@ -52,7 +52,10 @@ pub struct Player {
 
 fn spawn_player(prefabs: &PrefabStorage, player_builder: LazyBuilder) -> Entity {
     let shape = ShapeHandle::new(Ball::new(8.0));
-    let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).mass(100.0);
+    let body = RigidBodyDesc::new()
+        .status(BodyStatus::Dynamic)
+        .mass(10.0)
+        .linear_damping(0.0);
     let collider = ColliderDesc::new(shape);
     player_builder
         .with(PhysicsDesc::new(body, collider))
@@ -74,11 +77,18 @@ fn spawn_player(prefabs: &PrefabStorage, player_builder: LazyBuilder) -> Entity 
 
 const ATTACK_SENSOR_NAME: &'static str = "player_attack_sensor";
 
-fn spawn_test_sensor(builder: LazyBuilder, player: Entity) -> Entity {
+fn spawn_attack_sensor(builder: LazyBuilder, player: Entity, direction: Direction) -> Entity {
+    let offset = direction.tilts() * 8.0 + direction.clockwise().tilts() * 4.0;
     let shape = ShapeHandle::new(Cuboid::new(Vector2::new(8.0, 8.0)));
-    let collider = ColliderDesc::new(shape).sensor(true);
+    let collider = ColliderDesc::new(shape)
+        .sensor(true)
+        .position(Isometry2::new(offset, 0.0));
     builder
         .with(AttachedSensor::new(collider))
+        .with(AttackHitbox {
+            id: rand::random(),
+            hit_type: HitType::FriendlyAttack,
+        })
         .with(Parent { entity: player })
         .named(ATTACK_SENSOR_NAME)
         .build()
@@ -92,8 +102,6 @@ pub fn spawn_player_world(world: &mut World) {
     let player = spawn_player(&prefabs, builder);
     let builder = update.create_entity(&entities);
     initialize_camera(builder, player);
-    let builder = update.create_entity(&entities);
-    spawn_test_sensor(builder, player);
 }
 
 struct PlayerAnimationSystem;
@@ -137,6 +145,7 @@ struct PlayerAttackSystem;
 impl<'s> System<'s> for PlayerAttackSystem {
     type SystemData = (
         Read<'s, InputHandler<StringBindings>>,
+        Read<'s, Time>,
         Write<'s, Physics<f32>>,
         ReadStorage<'s, AttachedSensor>,
         ReadStorage<'s, PhysicsHandle>,
@@ -145,6 +154,7 @@ impl<'s> System<'s> for PlayerAttackSystem {
         WriteStorage<'s, AnimationControlSet<AnimationId, SpriteRender>>,
         WriteStorage<'s, Player>,
         WriteStorage<'s, AttackHitbox>,
+        Read<'s, LazyUpdate>,
         Entities<'s>,
     );
 
@@ -152,6 +162,7 @@ impl<'s> System<'s> for PlayerAttackSystem {
         &mut self,
         (
             input,
+            time,
             mut physics,
             sensors,
             handles,
@@ -160,22 +171,33 @@ impl<'s> System<'s> for PlayerAttackSystem {
             mut control_sets,
             mut player,
             mut attacks,
+            lazy,
             entities,
         ): Self::SystemData,
     ) {
-        if let Some(sensor) = get_named_entity(&entities, &names, ATTACK_SENSOR_NAME) {
-            attacks.remove(sensor);
-        }
         if let Some((entity, handle, player)) = (&entities, &handles, &mut player).join().next() {
-            match player.state {
-                PlayerState::Moving => {
-                    if Some(true) == input.action_is_down("attack") {
-                        player.state = PlayerState::Attacking(rand::random());
-                        physics.set_velocity(handle, Vector2::new(0.0, 0.0));
-                        if let (Some(animation_set), Some(control_set)) = (
-                            animation_sets.get(entity),
-                            get_animation_set(&mut control_sets, entity),
-                        ) {
+            if let (Some(animation_set), Some(control_set)) = (
+                animation_sets.get(entity),
+                get_animation_set(&mut control_sets, entity),
+            ) {
+                match player.state {
+                    PlayerState::Moving => {
+                        if let Some(sensor) =
+                            get_named_entity(&entities, &names, ATTACK_SENSOR_NAME)
+                        {
+                            println!("Deleting...");
+                            lazy.exec(move |world| {
+                                world.delete_entity(sensor);
+                            });
+                        }
+                        if Some(true) == input.action_is_down("attack") {
+                            player.state = PlayerState::Attacking(rand::random());
+                            spawn_attack_sensor(
+                                lazy.create_entity(&entities),
+                                entity,
+                                player.facing,
+                            );
+                            physics.set_velocity(handle, Vector2::new(0.0, 0.0));
                             set_active_animation(
                                 control_set,
                                 AnimationId::Attack(player.facing),
@@ -185,28 +207,20 @@ impl<'s> System<'s> for PlayerAttackSystem {
                             );
                         }
                     }
-                }
-                PlayerState::Attacking(attack_id) => {
-                    if let (Some(animation_set), Some(control_set)) = (
-                        animation_sets.get(entity),
-                        get_animation_set(&mut control_sets, entity),
-                    ) {
+                    PlayerState::Attacking(attack_id) => {
                         if let Some(AnimationId::Attack(_)) = get_active_animation(control_set) {
                             if let Some(sensor) =
                                 get_named_entity(&entities, &names, ATTACK_SENSOR_NAME)
                             {
-                                attacks.insert(
-                                    sensor,
-                                    AttackHitbox {
-                                        id: attack_id,
-                                        hit_type: HitType::FriendlyAttack,
-                                    },
-                                );
-                                if let Some(sensor) = sensors.get(sensor) {
-                                    let offset = player.facing.tilts() * 8.0
-                                        + player.facing.clockwise().tilts() * 4.0;
-                                    physics.set_sensor_position(sensor, offset.x, offset.y);
-                                }
+                                attacks
+                                    .insert(
+                                        sensor,
+                                        AttackHitbox {
+                                            id: attack_id,
+                                            hit_type: HitType::FriendlyAttack,
+                                        },
+                                    )
+                                    .unwrap();
                             }
                         } else {
                             player.state = PlayerState::Moving;
@@ -219,8 +233,29 @@ impl<'s> System<'s> for PlayerAttackSystem {
                             );
                         }
                     }
+                    PlayerState::Hit(size) => {
+                        if let Some(sensor) =
+                            get_named_entity(&entities, &names, ATTACK_SENSOR_NAME)
+                        {
+                            lazy.exec(move |world| {
+                                world.delete_entity(sensor);
+                            });
+                        }
+                        if size < time.delta_seconds() {
+                            player.state = PlayerState::Moving;
+                        } else {
+                            player.state = PlayerState::Hit(size - time.delta_seconds());
+                            set_active_animation(
+                                control_set,
+                                AnimationId::Staggered(player.facing),
+                                &animation_set,
+                                EndControl::Stay,
+                                1.0,
+                            );
+                        }
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
         }
     }

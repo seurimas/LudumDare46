@@ -8,12 +8,13 @@ use amethyst::{
     ecs::world::LazyBuilder,
     renderer::SpriteRender,
 };
+use na::Isometry2;
 use ncollide2d::shape::*;
 use nphysics2d::object::*;
 
 fn spawn_crab(prefabs: &PrefabStorage, player_builder: LazyBuilder) -> Entity {
     let shape = ShapeHandle::new(Ball::new(8.0));
-    let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).mass(10.0);
+    let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).mass(1.0);
     let collider = ColliderDesc::new(shape);
     let mut transform = Transform::default();
     transform.set_translation_xyz(0.0, 64.0, 1.0);
@@ -21,12 +22,12 @@ fn spawn_crab(prefabs: &PrefabStorage, player_builder: LazyBuilder) -> Entity {
         .with(PhysicsDesc::new(body, collider))
         .with(prefabs.crab.clone())
         .with(Goblin {
-            walk_speed: 80.0,
+            walk_speed: 40.0,
             state: GoblinState::Idling(5.0),
             facing: Direction::South,
-            attack_distance: 100.0,
+            attack_distance: 50.0,
             lunge_speed: 120.0,
-            chase_distance: 150.0,
+            chase_distance: 75.0,
         })
         .with(Health {
             friendly: false,
@@ -37,12 +38,23 @@ fn spawn_crab(prefabs: &PrefabStorage, player_builder: LazyBuilder) -> Entity {
         .build()
 }
 
-fn spawn_attack_sensor(builder: LazyBuilder, enemy: Entity) -> Entity {
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(8.0, 8.0)));
-    let collider = ColliderDesc::new(shape).sensor(true);
+fn spawn_goblin_attack_sensor(
+    builder: LazyBuilder,
+    goblin: Entity,
+    direction: Direction,
+) -> Entity {
+    let offset = direction.tilts() * 6.0 + direction.clockwise().tilts() * 3.0;
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(6.0, 6.0)));
+    let collider = ColliderDesc::new(shape)
+        .sensor(true)
+        .position(Isometry2::new(offset, 0.0));
     builder
         .with(AttachedSensor::new(collider))
-        .with(Parent { entity: enemy })
+        .with(AttackHitbox {
+            id: rand::random(),
+            hit_type: HitType::EnemyAttack,
+        })
+        .with(Parent { entity: goblin })
         .build()
 }
 
@@ -52,8 +64,6 @@ pub fn spawn_crab_world(world: &mut World) {
     let builder = update.create_entity(&entities);
     let prefabs = world.read_resource::<PrefabStorage>();
     let crab = spawn_crab(&prefabs, builder);
-    let builder = update.create_entity(&entities);
-    spawn_attack_sensor(builder, crab);
 }
 
 #[derive(Debug, PartialEq)]
@@ -62,7 +72,7 @@ pub enum GoblinState {
     Moving(f32),
     Chasing(Entity),
     Attacking(usize, f32),
-    Hit,
+    Hit(f32),
 }
 
 #[derive(Component, Debug)]
@@ -100,13 +110,33 @@ impl GoblinAiSystem {
             })
             .and_then(|(player_entity, offset)| {
                 if offset.x * offset.x + offset.y * offset.y
-                    <= goblin.attack_distance * goblin.attack_distance
+                    <= goblin.chase_distance * goblin.chase_distance
                 {
                     Some(player_entity)
                 } else {
                     None
                 }
             })
+    }
+
+    fn walk(
+        &self,
+        direction: Direction,
+        physics: &mut Physics<f32>,
+        handle: &PhysicsHandle,
+        goblin: &mut Goblin,
+        control_set: &mut AnimationControlSet<AnimationId, SpriteRender>,
+        animation_set: &AnimationSet<AnimationId, SpriteRender>,
+    ) {
+        goblin.facing = direction;
+        physics.set_velocity(handle, goblin.facing.tilts() * goblin.walk_speed);
+        set_active_animation(
+            control_set,
+            AnimationId::Walk(goblin.facing),
+            &animation_set,
+            EndControl::Loop(None),
+            1.0,
+        );
     }
 }
 
@@ -122,6 +152,7 @@ impl<'s> System<'s> for GoblinAiSystem {
         WriteStorage<'s, AnimationControlSet<AnimationId, SpriteRender>>,
         WriteStorage<'s, Goblin>,
         WriteStorage<'s, AttackHitbox>,
+        Read<'s, LazyUpdate>,
         Entities<'s>,
     );
 
@@ -138,17 +169,15 @@ impl<'s> System<'s> for GoblinAiSystem {
             mut control_sets,
             mut goblins,
             mut attacks,
+            lazy,
             entities,
         ): Self::SystemData,
     ) {
-        for (entity, handle, goblin) in (&entities, &handles, &mut goblins).join() {
-            if let (Some(animation_set), Some(control_set)) = (
+        for (entity, handle, mut goblin) in (&entities, &handles, &mut goblins).join() {
+            if let (Some(animation_set), Some(mut control_set)) = (
                 animation_sets.get(entity),
                 get_animation_set(&mut control_sets, entity),
             ) {
-                for (_, sensor) in get_sensors(&entities, &sensors, &parents, entity) {
-                    attacks.remove(sensor);
-                }
                 match goblin.state {
                     GoblinState::Moving(time_left) => {
                         if let Some(player) = self
@@ -156,13 +185,13 @@ impl<'s> System<'s> for GoblinAiSystem {
                         {
                             goblin.state = GoblinState::Chasing(player);
                         } else {
-                            physics.set_velocity(handle, goblin.facing.tilts() * goblin.walk_speed);
-                            set_active_animation(
-                                control_set,
-                                AnimationId::Walk(goblin.facing),
+                            self.walk(
+                                goblin.facing,
+                                &mut physics,
+                                &handle,
+                                &mut goblin,
+                                &mut control_set,
                                 &animation_set,
-                                EndControl::Loop(None),
-                                1.0,
                             );
                             if time_left < time.delta_seconds() {
                                 goblin.state = GoblinState::Idling(2.0);
@@ -173,8 +202,18 @@ impl<'s> System<'s> for GoblinAiSystem {
                         }
                     }
                     GoblinState::Idling(time_left) => {
+                        for (_, sensor) in get_sensors(&entities, &sensors, &parents, entity).iter()
+                        {
+                            let sensor = *sensor;
+                            if attacks.contains(sensor) {
+                                lazy.exec(move |world| {
+                                    world.delete_entity(sensor);
+                                });
+                            }
+                        }
                         if let Some(player) = self
                             .should_chase(&physics, &handles, &entities, &names, &goblin, &handle)
+                            .and_then(|player| if time_left < 2.0 { Some(player) } else { None })
                         {
                             goblin.state = GoblinState::Chasing(player);
                         } else {
@@ -196,7 +235,6 @@ impl<'s> System<'s> for GoblinAiSystem {
                         }
                     }
                     GoblinState::Chasing(player) => {
-                        println!("CHASING");
                         if let Some(player_handle) = handles.get(player) {
                             let mut found = false;
                             for direction in Direction::vec() {
@@ -213,30 +251,29 @@ impl<'s> System<'s> for GoblinAiSystem {
                                         );
                                         goblin.state = GoblinState::Attacking(rand::random(), 0.0);
                                         goblin.facing = direction;
-                                        println!("Attacking {:?}", direction);
+                                        spawn_goblin_attack_sensor(
+                                            lazy.create_entity(&entities),
+                                            entity,
+                                            goblin.facing,
+                                        );
                                         found = true;
                                     }
                                 }
                             }
                             if !found {
                                 if let Some(offset) = physics.get_between(handle, player_handle) {
-                                    goblin.facing = Direction::short_seek(offset);
-
-                                    physics.set_velocity(
-                                        handle,
-                                        goblin.facing.tilts() * goblin.walk_speed,
-                                    );
-                                    set_active_animation(
-                                        control_set,
-                                        AnimationId::Walk(goblin.facing),
+                                    self.walk(
+                                        Direction::short_seek(offset, 4.0),
+                                        &mut physics,
+                                        &handle,
+                                        &mut goblin,
+                                        &mut control_set,
                                         &animation_set,
-                                        EndControl::Loop(None),
-                                        1.0,
                                     );
                                 }
                             }
                         } else {
-                            goblin.state = GoblinState::Idling(2.0);
+                            goblin.state = GoblinState::Idling(4.0);
                         }
                     }
                     GoblinState::Attacking(attack_id, progress) => {
@@ -249,13 +286,15 @@ impl<'s> System<'s> for GoblinAiSystem {
                                 for (_, sensor) in
                                     get_sensors(&entities, &sensors, &parents, entity)
                                 {
-                                    attacks.insert(
-                                        sensor,
-                                        AttackHitbox {
-                                            id: attack_id,
-                                            hit_type: HitType::EnemyAttack,
-                                        },
-                                    );
+                                    attacks
+                                        .insert(
+                                            sensor,
+                                            AttackHitbox {
+                                                id: attack_id,
+                                                hit_type: HitType::EnemyAttack,
+                                            },
+                                        )
+                                        .unwrap();
                                     if let Some(sensor) = sensors.get(sensor) {
                                         let offset = goblin.facing.tilts() * 4.0
                                             + goblin.facing.clockwise().tilts() * 4.0;
@@ -268,7 +307,21 @@ impl<'s> System<'s> for GoblinAiSystem {
                             goblin.state =
                                 GoblinState::Attacking(attack_id, progress + time.delta_seconds());
                         } else {
-                            goblin.state = GoblinState::Idling(2.0);
+                            goblin.state = GoblinState::Idling(4.0);
+                        }
+                    }
+                    GoblinState::Hit(size) => {
+                        if size < time.delta_seconds() {
+                            goblin.state = GoblinState::Idling(3.0);
+                        } else {
+                            goblin.state = GoblinState::Hit(size - time.delta_seconds());
+                            set_active_animation(
+                                control_set,
+                                AnimationId::Staggered(goblin.facing),
+                                &animation_set,
+                                EndControl::Stay,
+                                1.0,
+                            );
                         }
                     }
                     _ => {}

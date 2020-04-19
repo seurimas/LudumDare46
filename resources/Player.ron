@@ -262,6 +262,74 @@ Prefab(
                                 ],
                             ),
                         ),
+                        (
+                            // AnimationId
+                            Staggered(East),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 1.0],
+                                            output: [14, 14],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
+                        (
+                            // AnimationId
+                            Staggered(North),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 1.0],
+                                            output: [15, 15],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
+                        (
+                            // AnimationId
+                            Staggered(West),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 1.0],
+                                            output: [22, 22],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
+                        (
+                            // AnimationId
+                            Staggered(South),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 1.0],
+                                            output: [23, 23],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
                     ],
                 ),
             ),

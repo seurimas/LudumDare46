@@ -1,4 +1,5 @@
 extern crate nalgebra as na;
+extern crate nalgebra19 as na19;
 extern crate rand;
 extern crate tiled;
 mod assets;
@@ -242,7 +243,11 @@ impl<'s> System<'s> for DebugDrawShapes {
         for (handle, collider) in physics.colliders.iter() {
             if let Some(circle) = collider.shape().as_shape::<Ball<f32>>() {
                 debugLines.draw_circle(
-                    collider.position().pos3(),
+                    na19::geometry::Point3::<f32>::new(
+                        collider.position().pos3().x,
+                        collider.position().pos3().y,
+                        collider.position().pos3().z,
+                    ),
                     circle.radius() as f32,
                     16,
                     Srgba::new(1.0, 1.0, 1.0, 1.0),
@@ -254,7 +259,7 @@ impl<'s> System<'s> for DebugDrawShapes {
                     [pos.x - ext.x as f32, pos.y - ext.y as f32].into(),
                     [pos.x + ext.x as f32, pos.y + ext.y as f32].into(),
                     0.0,
-                    UnitQuaternion::new(Vector3::new(
+                    na19::UnitQuaternion::new(na19::Vector3::new(
                         0.0,
                         0.0,
                         collider.position().rotation.angle() as f32,

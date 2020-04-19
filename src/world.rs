@@ -10,7 +10,6 @@ use amethyst::{
     renderer::{camera::*, SpriteRender},
     tiles::{MortonEncoder, Tile, TileMap},
 };
-use na::{Isometry2, Vector2, Vector3};
 use ncollide2d::shape::*;
 use nphysics2d::object::*;
 
@@ -61,7 +60,7 @@ impl Tile for WorldTile {
 
 fn initialize_fence_post(world: &mut World, transform: Transform, parent: Entity) {
     let body = RigidBodyDesc::new().status(BodyStatus::Static);
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
+    let shape = ShapeHandle::new(Cuboid::new(na::Vector2::new(16.0, 16.0)));
     let collider = ColliderDesc::new(shape);
     world
         .create_entity()
@@ -97,8 +96,8 @@ pub fn initialize_tile_world(world: &mut World) {
     let map_entity = world
         .create_entity()
         .with(TileMap::<WorldTile, MortonEncoder>::new(
-            Vector3::new(map_size.0, map_size.1, 1),
-            Vector3::new(tile_size.0, tile_size.1, 1),
+            na19::Vector3::new(map_size.0, map_size.1, 1),
+            na19::Vector3::new(tile_size.0, tile_size.1, 1),
             Some(tile_spritesheet),
         ))
         .with(Transform::default())
