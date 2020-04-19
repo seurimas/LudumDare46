@@ -10,6 +10,7 @@ dependencies = [
  "nalgebra",
  "ncollide2d",
  "nphysics2d",
+ "rand 0.7.3",
  "serde",
  "tiled",
 ]

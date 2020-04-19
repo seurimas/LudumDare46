@@ -13,6 +13,7 @@ use amethyst::{
     },
     utils::application_root_dir,
 };
+use na::Vector2;
 use serde::{Deserialize, Serialize};
 
 pub fn get_resource(str: &str) -> String {
@@ -52,6 +53,7 @@ pub fn load_prefab(world: &mut World, path: String) -> Handle<Prefab<MyPrefabDat
 
 pub struct PrefabStorage {
     pub player: Handle<Prefab<MyPrefabData>>,
+    pub crab: Handle<Prefab<MyPrefabData>>,
 }
 
 pub fn load_sound_file<'a>(world: &mut World, path: String) -> SourceHandle {
@@ -129,6 +131,72 @@ impl Direction {
             Direction::West,
             Direction::South,
         ]
+    }
+
+    pub fn tilts(&self) -> Vector2<f32> {
+        match self {
+            Direction::East => Vector2::new(1.0, 0.0),
+            Direction::North => Vector2::new(0.0, 1.0),
+            Direction::West => Vector2::new(-1.0, 0.0),
+            Direction::South => Vector2::new(0.0, -1.0),
+        }
+    }
+
+    pub fn clockwise(&self) -> Self {
+        match self {
+            Direction::East => Direction::South,
+            Direction::South => Direction::West,
+            Direction::West => Direction::North,
+            Direction::North => Direction::East,
+        }
+    }
+
+    pub fn pick() -> Self {
+        if rand::random() {
+            if rand::random() {
+                Direction::East
+            } else {
+                Direction::North
+            }
+        } else {
+            if rand::random() {
+                Direction::West
+            } else {
+                Direction::South
+            }
+        }
+    }
+
+    pub fn short_seek(offset: Vector2<f32>) -> Self {
+        if f32::abs(offset.x) > f32::abs(offset.y) {
+            if offset.y > 0.0 {
+                Direction::North
+            } else {
+                Direction::South
+            }
+        } else {
+            if offset.x > 0.0 {
+                Direction::East
+            } else {
+                Direction::West
+            }
+        }
+    }
+
+    pub fn long_seek(offset: Vector2<f32>) -> Self {
+        if f32::abs(offset.x) < f32::abs(offset.y) {
+            if offset.y > 0.0 {
+                Direction::North
+            } else {
+                Direction::South
+            }
+        } else {
+            if offset.x > 0.0 {
+                Direction::East
+            } else {
+                Direction::West
+            }
+        }
     }
 }
 

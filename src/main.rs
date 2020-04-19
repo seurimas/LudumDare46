@@ -1,6 +1,9 @@
 extern crate nalgebra as na;
+extern crate rand;
 extern crate tiled;
 mod assets;
+mod combat;
+mod enemies;
 mod physics;
 mod player;
 mod prelude;
@@ -30,6 +33,8 @@ use amethyst::{
 };
 use amethyst_imgui::RenderImgui;
 use assets::*;
+use combat::CombatBundle;
+use enemies::*;
 use imgui::*;
 use na::{Isometry2, Point2, Point3, RealField, UnitQuaternion, Vector2, Vector3};
 use ncollide2d::shape::*;
@@ -54,8 +59,10 @@ impl SimpleState for MyState {
         data.world.insert(SpriteStorage { tile_spritesheet });
 
         let player_prefab = load_prefab(data.world, get_resource("Player.ron"));
+        let crab_prefab = load_prefab(data.world, get_resource("Enemies1.ron"));
         data.world.insert(PrefabStorage {
             player: player_prefab,
+            crab: crab_prefab,
         });
 
         let bounce_wav = load_sound_file(data.world, get_resource("bounce.wav"));
@@ -72,6 +79,7 @@ impl SimpleState for MyState {
         data.world.insert(MapStorage { village_map });
 
         spawn_player_world(&mut data.world);
+        spawn_crab_world(&mut data.world);
     }
 
     fn update(&mut self, data: &mut StateData<GameData>) -> SimpleTrans {
@@ -198,6 +206,8 @@ fn main() -> amethyst::Result<()> {
         .with_bundle(AudioBundle::default())?
         .with_bundle(PhysicsBundle)?
         .with_bundle(PlayerBundle)?
+        .with_bundle(EnemiesBundle)?
+        .with_bundle(CombatBundle)?
         .with_bundle(FpsCounterBundle)?
         .with(DebugDrawShapes, "debug_shapes", &[])
         .with_barrier()

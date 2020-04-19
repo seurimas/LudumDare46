@@ -6,7 +6,7 @@
 */
 
 /*
-  PLAYER
+  CRAB MONSTER
 */
 Prefab(
     entities: [
@@ -14,7 +14,7 @@ Prefab(
             data: MyPrefabData(
                 sprite_scene: (
                     sheet: Sheet(
-                        texture: File("Player.png", (
+                        texture: File("Enemies1.png", (
                             "IMAGE", (
                                 sampler_info: (
                                     min_filter: Nearest,
@@ -42,11 +42,11 @@ Prefab(
                                 cell_size: (32, 32),
                             )),
                         ],
-                        name: "player",
+                        name: "enemy1",
                     ),
                     // SpriteRenderPrefab
                     render: (
-                        sheet: "player",
+                        sheet: "enemy1",
                         sprite_number: 0,
                     ),
 		    transform: (
@@ -57,7 +57,6 @@ Prefab(
                 animation_set: (
                     animations: [
                         (
-                            // AnimationId
                             Idle(East),
                             (
                                 samplers: [
@@ -66,15 +65,14 @@ Prefab(
                                         SpriteIndex,
                                         (
                                             input: [0.0, 1.0],
-                                            output: [8, 8],
+                                            output: [0, 0],
                                             function: Step,
                                         ),
                                     ),
                                 ],
                             ),
-                        ),
-                        (
-                            // AnimationId
+			),
+			(
                             Idle(North),
                             (
                                 samplers: [
@@ -83,15 +81,14 @@ Prefab(
                                         SpriteIndex,
                                         (
                                             input: [0.0, 1.0],
-                                            output: [11, 11],
+                                            output: [3, 3],
                                             function: Step,
                                         ),
                                     ),
                                 ],
                             ),
-                        ),
-                        (
-                            // AnimationId
+			),
+			(
                             Idle(West),
                             (
                                 samplers: [
@@ -100,15 +97,14 @@ Prefab(
                                         SpriteIndex,
                                         (
                                             input: [0.0, 1.0],
-                                            output: [16, 16],
+                                            output: [13, 13],
                                             function: Step,
                                         ),
                                     ),
                                 ],
                             ),
-                        ),
-                        (
-                            // AnimationId
+			),
+			(
                             Idle(South),
                             (
                                 samplers: [
@@ -117,16 +113,14 @@ Prefab(
                                         SpriteIndex,
                                         (
                                             input: [0.0, 1.0],
-                                            output: [19, 19],
+                                            output: [10, 10],
                                             function: Step,
                                         ),
                                     ),
                                 ],
                             ),
                         ),
-			
-                        (
-                            // AnimationId
+			(
                             Walk(East),
                             (
                                 samplers: [
@@ -135,15 +129,14 @@ Prefab(
                                         SpriteIndex,
                                         (
                                             input: [0.0, 0.25, 0.5, 0.75, 1.0],
-                                            output: [8, 9, 8, 10, 8],
+                                            output: [0, 1, 0, 2, 0],
                                             function: Step,
                                         ),
                                     ),
                                 ],
                             ),
                         ),
-                        (
-                            // AnimationId
+			(
                             Walk(North),
                             (
                                 samplers: [
@@ -152,32 +145,14 @@ Prefab(
                                         SpriteIndex,
                                         (
                                             input: [0.0, 0.25, 0.5, 0.75, 1.0],
-                                            output: [11, 12, 11, 13, 11],
+                                            output: [3, 4, 3, 5, 3],
                                             function: Step,
                                         ),
                                     ),
                                 ],
                             ),
                         ),
-                        (
-                            // AnimationId
-                            Walk(West),
-                            (
-                                samplers: [
-                                    (
-                                        0,
-                                        SpriteIndex,
-                                        (
-                                            input: [0.0, 0.25, 0.5, 0.75, 1.0],
-                                            output: [16, 17, 16, 18, 16],
-                                            function: Step,
-                                        ),
-                                    ),
-                                ],
-                            ),
-                        ),
-                        (
-                            // AnimationId
+			(
                             Walk(South),
                             (
                                 samplers: [
@@ -186,16 +161,30 @@ Prefab(
                                         SpriteIndex,
                                         (
                                             input: [0.0, 0.25, 0.5, 0.75, 1.0],
-                                            output: [19, 20, 19, 21, 19],
+                                            output: [10, 8, 10, 9, 10],
                                             function: Step,
                                         ),
                                     ),
                                 ],
                             ),
                         ),
-			
-                        (
-                            // AnimationId
+			(
+                            Walk(West),
+                            (
+                                samplers: [
+                                    (
+                                        0,
+                                        SpriteIndex,
+                                        (
+                                            input: [0.0, 0.25, 0.5, 0.75, 1.0],
+                                            output: [13, 11, 13, 12, 13],
+                                            function: Step,
+                                        ),
+                                    ),
+                                ],
+                            ),
+                        ),
+			(
                             Attack(East),
                             (
                                 samplers: [
@@ -203,16 +192,15 @@ Prefab(
                                         0,
                                         SpriteIndex,
                                         (
-                                            input: [0.0, 0.125, 0.25, 0.5],
-                                            output: [8, 24, 25, 8],
+                                            input: [0.0, 0.125, 0.375, 0.75],
+                                            output: [0, 16, 17, 0],
                                             function: Step,
                                         ),
                                     ),
                                 ],
                             ),
                         ),
-                        (
-                            // AnimationId
+			(
                             Attack(North),
                             (
                                 samplers: [
@@ -220,16 +208,15 @@ Prefab(
                                         0,
                                         SpriteIndex,
                                         (
-                                            input: [0.0, 0.125, 0.25, 0.5],
-                                            output: [11, 26, 27, 11],
+                                            input: [0.0, 0.125, 0.375, 0.75],
+                                            output: [3, 18, 19, 3],
                                             function: Step,
                                         ),
                                     ),
                                 ],
                             ),
                         ),
-                        (
-                            // AnimationId
+			(
                             Attack(West),
                             (
                                 samplers: [
@@ -237,16 +224,15 @@ Prefab(
                                         0,
                                         SpriteIndex,
                                         (
-                                            input: [0.0, 0.125, 0.25, 0.5],
-                                            output: [16, 28, 29, 16],
+                                            input: [0.0, 0.125, 0.375, 0.75],
+                                            output: [10, 20, 21, 10],
                                             function: Step,
                                         ),
                                     ),
                                 ],
                             ),
                         ),
-                        (
-                            // AnimationId
+			(
                             Attack(South),
                             (
                                 samplers: [
@@ -254,8 +240,8 @@ Prefab(
                                         0,
                                         SpriteIndex,
                                         (
-                                            input: [0.0, 0.125, 0.25, 0.5],
-                                            output: [19, 30, 31, 19],
+                                            input: [0.0, 0.125, 0.375, 0.75],
+                                            output: [13, 22, 23, 13],
                                             function: Step,
                                         ),
                                     ),

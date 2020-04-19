@@ -1,4 +1,5 @@
 use crate::assets::{AnimationId, Direction, PrefabStorage};
+use crate::combat::*;
 use crate::physics::*;
 use crate::prelude::*;
 use amethyst::{
@@ -16,8 +17,8 @@ use na::{Isometry2, Vector2};
 use ncollide2d::shape::*;
 use nphysics2d::object::*;
 
-const ARENA_WIDTH: f32 = 480.0;
-const ARENA_HEIGHT: f32 = 320.0;
+const ARENA_WIDTH: f32 = 240.0;
+const ARENA_HEIGHT: f32 = 160.0;
 fn standard_camera() -> Camera {
     Camera::standard_2d(ARENA_WIDTH, ARENA_HEIGHT)
 }
@@ -37,7 +38,7 @@ pub fn initialize_camera(builder: impl Builder, player: Entity) -> Entity {
 #[derive(Debug, PartialEq)]
 pub enum PlayerState {
     Moving,
-    Attacking,
+    Attacking(usize),
     Hit,
 }
 
@@ -49,8 +50,8 @@ pub struct Player {
     pub facing: Direction,
 }
 
-fn spawn_player(prefabs: &PrefabStorage, player_builder: impl Builder) -> Entity {
-    let shape = ShapeHandle::new(Ball::new(16.0));
+fn spawn_player(prefabs: &PrefabStorage, player_builder: LazyBuilder) -> Entity {
+    let shape = ShapeHandle::new(Ball::new(8.0));
     let body = RigidBodyDesc::new().status(BodyStatus::Dynamic).mass(100.0);
     let collider = ColliderDesc::new(shape);
     player_builder
@@ -62,13 +63,19 @@ fn spawn_player(prefabs: &PrefabStorage, player_builder: impl Builder) -> Entity
             state: PlayerState::Moving,
             facing: Direction::South,
         })
+        .with(Health {
+            friendly: true,
+            current_health: 100,
+            last_attack: 0,
+        })
+        .named("player")
         .build()
 }
 
 const ATTACK_SENSOR_NAME: &'static str = "player_attack_sensor";
 
 fn spawn_test_sensor(builder: LazyBuilder, player: Entity) -> Entity {
-    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(16.0, 16.0)));
+    let shape = ShapeHandle::new(Cuboid::new(Vector2::new(8.0, 8.0)));
     let collider = ColliderDesc::new(shape).sensor(true);
     builder
         .with(AttachedSensor::new(collider))
@@ -87,42 +94,6 @@ pub fn spawn_player_world(world: &mut World) {
     initialize_camera(builder, player);
     let builder = update.create_entity(&entities);
     spawn_test_sensor(builder, player);
-}
-
-fn get_active_animation(
-    control_set: &AnimationControlSet<AnimationId, SpriteRender>,
-) -> Option<AnimationId> {
-    for (id, animation) in control_set.animations.iter() {
-        if animation.state.is_running() {
-            return Some(*id);
-        }
-    }
-    None
-}
-
-fn set_active_animation(
-    control_set: &mut AnimationControlSet<AnimationId, SpriteRender>,
-    id: AnimationId,
-    animation_set: &AnimationSet<AnimationId, SpriteRender>,
-    end: EndControl,
-    rate_multiplier: f32,
-) {
-    let mut actives = Vec::new();
-    for (active_id, animation) in control_set.animations.iter() {
-        if animation.state.is_running() && *active_id != id {
-            actives.push(*active_id);
-        }
-    }
-    for active in actives {
-        control_set.abort(active);
-    }
-    control_set.add_animation(
-        id,
-        &animation_set.get(&id).unwrap(),
-        end,
-        rate_multiplier,
-        AnimationCommand::Start,
-    );
 }
 
 struct PlayerAnimationSystem;
@@ -173,6 +144,7 @@ impl<'s> System<'s> for PlayerAttackSystem {
         ReadStorage<'s, AnimationSet<AnimationId, SpriteRender>>,
         WriteStorage<'s, AnimationControlSet<AnimationId, SpriteRender>>,
         WriteStorage<'s, Player>,
+        WriteStorage<'s, AttackHitbox>,
         Entities<'s>,
     );
 
@@ -187,14 +159,18 @@ impl<'s> System<'s> for PlayerAttackSystem {
             animation_sets,
             mut control_sets,
             mut player,
+            mut attacks,
             entities,
         ): Self::SystemData,
     ) {
+        if let Some(sensor) = get_named_entity(&entities, &names, ATTACK_SENSOR_NAME) {
+            attacks.remove(sensor);
+        }
         if let Some((entity, handle, player)) = (&entities, &handles, &mut player).join().next() {
             match player.state {
                 PlayerState::Moving => {
                     if Some(true) == input.action_is_down("attack") {
-                        player.state = PlayerState::Attacking;
+                        player.state = PlayerState::Attacking(rand::random());
                         physics.set_velocity(handle, Vector2::new(0.0, 0.0));
                         if let (Some(animation_set), Some(control_set)) = (
                             animation_sets.get(entity),
@@ -210,7 +186,7 @@ impl<'s> System<'s> for PlayerAttackSystem {
                         }
                     }
                 }
-                PlayerState::Attacking => {
+                PlayerState::Attacking(attack_id) => {
                     if let (Some(animation_set), Some(control_set)) = (
                         animation_sets.get(entity),
                         get_animation_set(&mut control_sets, entity),
@@ -219,8 +195,17 @@ impl<'s> System<'s> for PlayerAttackSystem {
                             if let Some(sensor) =
                                 get_named_entity(&entities, &names, ATTACK_SENSOR_NAME)
                             {
+                                attacks.insert(
+                                    sensor,
+                                    AttackHitbox {
+                                        id: attack_id,
+                                        hit_type: HitType::FriendlyAttack,
+                                    },
+                                );
                                 if let Some(sensor) = sensors.get(sensor) {
-                                    physics.set_sensor_position(sensor, 8.0, 8.0);
+                                    let offset = player.facing.tilts() * 8.0
+                                        + player.facing.clockwise().tilts() * 4.0;
+                                    physics.set_sensor_position(sensor, offset.x, offset.y);
                                 }
                             }
                         } else {

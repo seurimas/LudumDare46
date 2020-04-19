@@ -10,6 +10,8 @@ use amethyst::{
 use nalgebra::geometry::{Isometry2, Point2, Point3, UnitQuaternion};
 use nalgebra::{RealField, Vector2};
 use ncollide2d::pipeline::narrow_phase::ContactEvent;
+use ncollide2d::pipeline::object::CollisionGroups;
+use ncollide2d::query::{Proximity, Ray};
 use nphysics2d::force_generator::DefaultForceGeneratorSet;
 use nphysics2d::joint::DefaultJointConstraintSet;
 use nphysics2d::math::{Force, ForceType};
@@ -35,7 +37,7 @@ impl PhysicsDesc {
 #[storage(VecStorage)]
 pub struct AttachedSensor {
     collider: ColliderDesc<f32>,
-    handle: Option<(DefaultBodyHandle, DefaultColliderHandle)>,
+    pub handle: Option<(DefaultBodyHandle, DefaultColliderHandle)>,
 }
 
 impl AttachedSensor {
@@ -47,6 +49,21 @@ impl AttachedSensor {
     }
     pub fn set_handle(&mut self, handle: (DefaultBodyHandle, DefaultColliderHandle)) {
         self.handle = Some(handle);
+    }
+    pub fn get_handle(&self) -> PhysicsHandle {
+        if let Some(handle) = self.handle {
+            PhysicsHandle {
+                body: Some(handle.0),
+                collider: Some(handle.1),
+                fresh: false,
+            }
+        } else {
+            PhysicsHandle {
+                body: None,
+                collider: None,
+                fresh: true,
+            }
+        }
     }
 }
 
@@ -131,6 +148,12 @@ impl<N: RealField> Physics<N> {
         }
     }
 
+    pub fn get_location(&self, handle: &PhysicsHandle) -> Option<Point2<N>> {
+        self.get_position(handle)
+            .map(|location| location.translation.vector)
+            .map(|vector| Point2::new(vector.x, vector.y))
+    }
+
     pub fn set_location(&mut self, handle: &PhysicsHandle, x: N, y: N) {
         if let Some(handle) = handle.body {
             if let Some(rigid_body) = self.bodies.rigid_body_mut(handle) {
@@ -148,7 +171,7 @@ impl<N: RealField> Physics<N> {
                 self.bodies.rigid_body(handle.0),
                 self.colliders.get_mut(handle.1),
             ) {
-                collider.set_position(Isometry2::new(
+                collider.(Isometry2::new(
                     parent.position().translation.vector + Vector2::new(x, y),
                     collider.position().rotation.angle(),
                 ));
@@ -205,6 +228,76 @@ impl<N: RealField> Physics<N> {
         } else {
             None
         }
+    }
+
+    pub fn get_between(
+        &self,
+        handle1: &PhysicsHandle,
+        handle2: &PhysicsHandle,
+    ) -> Option<Vector2<N>> {
+        if let (Some(collider1), Some(collider2)) = (handle1.collider, handle2.collider) {
+            if let (Some(collider1), Some(collider2)) =
+                (self.colliders.get(collider1), self.colliders.get(collider2))
+            {
+                Some(
+                    collider2.position().translation.vector
+                        - collider1.position().translation.vector,
+                )
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn is_intersecting(&self, handle1: &PhysicsHandle, handle2: &PhysicsHandle) -> bool {
+        if let (Some(collider1), Some(collider2)) = (handle1.collider, handle2.collider) {
+            !self
+                .geo_world
+                .proximity_pair(&self.colliders, collider1, collider2, true)
+                .is_none()
+        } else {
+            false
+        }
+    }
+
+    pub fn get_intersections(&self, handle: &PhysicsHandle) -> Vec<Entity> {
+        let mut found = Vec::new();
+        if let Some(collider) = handle.collider {
+            if let Some(interferences) = self
+                .geo_world
+                .colliders_in_proximity_of(&self.colliders, collider)
+            {
+                for interference in interferences {
+                    if let Some(entity) = self.get_collider_entity(interference.0) {
+                        found.push(*entity);
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    pub fn ray_cast(
+        &self,
+        handle: &PhysicsHandle,
+        direction: Vector2<N>,
+        groups: Option<CollisionGroups>,
+    ) -> Vec<(Entity, N)> {
+        let mut found = Vec::new();
+        if let Some(center) = self.get_location(handle) {
+            for interference in self.geo_world.interferences_with_ray(
+                &self.colliders,
+                &Ray::<N>::new(center, direction),
+                &groups.unwrap_or_default(),
+            ) {
+                if let Some(entity) = self.get_collider_entity(interference.0) {
+                    found.push((*entity, interference.2.toi));
+                }
+            }
+        }
+        found
     }
 }
 
@@ -380,7 +473,7 @@ impl<'a, 'b> SystemBundle<'a, 'b> for PhysicsBundle {
         dispatcher.add(PhysicsSpawningSystem, "physics_spawn", &[]);
         dispatcher.add(PhysicsSystem, "physics", &["physics_spawn"]);
         dispatcher.add(PhysicsDeletionSystem, "physics_delete", &[]);
-        dispatcher.add(BounceSystem, "bounce", &[]);
+        // dispatcher.add(BounceSystem, "bounce", &[]);
         Ok(())
     }
 }
