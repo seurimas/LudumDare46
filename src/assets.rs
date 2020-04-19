@@ -11,7 +11,7 @@ use amethyst::{
         types::Texture,
         ImageFormat, SpriteRender, SpriteSheet, SpriteSheetFormat,
     },
-    utils::application_root_dir,
+    utils::{application_root_dir, scene::BasicScenePrefab},
 };
 use na::Vector2;
 use serde::{Deserialize, Serialize};

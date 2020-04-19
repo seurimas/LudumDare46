@@ -1,0 +1,45 @@
+#![enable(implicit_some)]
+Container(
+    transform: (
+        id: "hud",
+        anchor: Middle,
+        stretch: X( x_margin: 0.0 ),
+
+        y: -60.,
+        z: 1.0,
+
+        height: 120.0,
+    ),
+    background: SolidColor(0.6, 0.6, 1.0, 0.8),
+    children: [
+        Container(
+            transform: (
+                id: "hearts",
+                x: 50,
+	            y: 60,
+                width: 100.0,
+                height: 120.0,
+                anchor: TopLeft,
+            ),
+	        children: [
+                Image(
+                    transform: (
+                        id: "heart0",
+                        x: -8.,
+                        y: 8.,
+                        width: 8.,
+                        height: 8.,
+                        anchor: MiddleLeft,
+                    ),
+                    image: PartialTexture(
+                        tex: File("sprites.png", ("IMAGE", ())),
+                        left: 0.,
+                        top: 0.,
+                        right: 0.03125,
+                        bottom: 0.03125,
+                    ),
+                ),
+            ],
+        ),
+    ]
+)

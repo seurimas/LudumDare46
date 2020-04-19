@@ -27,6 +27,7 @@ use amethyst::{
         ImageFormat, SpriteRender, SpriteSheet, SpriteSheetFormat,
     },
     tiles::{MortonEncoder, RenderTiles2D},
+    ui::{RenderUi, UiBundle, UiCreator},
     utils::{
         application_root_dir,
         fps_counter::{FpsCounter, FpsCounterBundle},
@@ -81,6 +82,9 @@ impl SimpleState for MyState {
 
         spawn_player_world(&mut data.world);
         spawn_crab_world(&mut data.world);
+        data.world.exec(|mut creator: UiCreator<'_>| {
+            creator.create(get_resource("hud.ron"), ());
+        });
     }
 
     fn update(&mut self, data: &mut StateData<GameData>) -> SimpleTrans {
@@ -202,6 +206,7 @@ fn main() -> amethyst::Result<()> {
                 .with_plugin(RenderFlat2D::default())
                 .with_plugin(RenderTiles2D::<WorldTile, MortonEncoder>::default())
                 .with_plugin(RenderDebugLines::default())
+                .with_plugin(RenderUi::default())
                 .with_plugin(RenderImgui::<amethyst::input::StringBindings>::default()),
         )?
         .with_bundle(AudioBundle::default())?
@@ -210,6 +215,7 @@ fn main() -> amethyst::Result<()> {
         .with_bundle(EnemiesBundle)?
         .with_bundle(CombatBundle)?
         .with_bundle(FpsCounterBundle)?
+        .with_bundle(UiBundle::<amethyst::input::StringBindings>::new())?
         .with(DebugDrawShapes, "debug_shapes", &[])
         .with_barrier()
         .with(ImguiDebugSystem::default(), "imgui_demo", &[]);
