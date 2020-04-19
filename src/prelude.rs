@@ -1,7 +1,10 @@
-pub use crate::assets::{AnimationId, Direction};
+pub use crate::assets::{AnimationId, Direction, SoundStorage};
 pub use crate::physics::{AttachedSensor, PhysicsHandle};
+use amethyst::shred::{ResourceId, SystemData};
 pub use amethyst::{
     animation::*,
+    assets::AssetStorage,
+    audio::{output::Output, Source, SourceHandle},
     core::{bundle::SystemBundle, timing::Time, transform::components::Parent, Named},
     ecs::*,
     error::Error,
@@ -92,4 +95,50 @@ pub fn set_active_animation(
         rate_multiplier,
         AnimationCommand::Start,
     );
+}
+
+#[derive(SystemData)]
+pub struct SoundPlayer<'a> {
+    storage: Option<Read<'a, SoundStorage>>,
+    output: Option<Read<'a, Output>>,
+    sources: Read<'a, AssetStorage<Source>>,
+}
+
+impl<'a> SoundPlayer<'a> {
+    pub fn player_hit(&self) {
+        if let Some(ref output) = self.output.as_ref() {
+            if let Some(ref sounds) = self.storage.as_ref() {
+                if let Some(sound) = self.sources.get(&sounds.player_hit.clone()) {
+                    output.play_once(sound, 1.0);
+                }
+            }
+        }
+    }
+    pub fn goblin_hit(&self) {
+        if let Some(ref output) = self.output.as_ref() {
+            if let Some(ref sounds) = self.storage.as_ref() {
+                if let Some(sound) = self.sources.get(&sounds.goblin_hit.clone()) {
+                    output.play_once(sound, 1.0);
+                }
+            }
+        }
+    }
+    pub fn pylon_hit(&self) {
+        if let Some(ref output) = self.output.as_ref() {
+            if let Some(ref sounds) = self.storage.as_ref() {
+                if let Some(sound) = self.sources.get(&sounds.pylon_hit.clone()) {
+                    output.play_once(sound, 1.0);
+                }
+            }
+        }
+    }
+    pub fn sword_slash(&self) {
+        if let Some(ref output) = self.output.as_ref() {
+            if let Some(ref sounds) = self.storage.as_ref() {
+                if let Some(sound) = self.sources.get(&sounds.sword_slash.clone()) {
+                    output.play_once(sound, 1.0);
+                }
+            }
+        }
+    }
 }

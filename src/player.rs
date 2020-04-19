@@ -182,6 +182,7 @@ impl<'s> System<'s> for PlayerAttackSystem {
         WriteStorage<'s, Player>,
         WriteStorage<'s, AttackHitbox>,
         Read<'s, LazyUpdate>,
+        SoundPlayer<'s>,
         Entities<'s>,
     );
 
@@ -199,6 +200,7 @@ impl<'s> System<'s> for PlayerAttackSystem {
             mut player,
             mut attacks,
             lazy,
+            sounds,
             entities,
         ): Self::SystemData,
     ) {
@@ -218,6 +220,7 @@ impl<'s> System<'s> for PlayerAttackSystem {
                         }
                         if Some(true) == input.action_is_down("attack") {
                             player.state = PlayerState::Attacking(rand::random());
+                            sounds.sword_slash();
                             spawn_attack_sensor(
                                 lazy.create_entity(&entities),
                                 entity,

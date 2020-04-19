@@ -85,7 +85,10 @@ pub struct SpriteStorage {
 
 #[derive(Clone)]
 pub struct SoundStorage {
-    pub bounce_wav: SourceHandle,
+    pub goblin_hit: SourceHandle,
+    pub player_hit: SourceHandle,
+    pub pylon_hit: SourceHandle,
+    pub sword_slash: SourceHandle,
 }
 
 #[derive(Clone, Debug)]

@@ -1,7 +1,7 @@
 #![enable(implicit_some)]
 Container(
     transform: (
-        id: "main_menu",
+        id: "game_over",
         anchor: Middle,
         stretch: XY( x_margin: 0.0, y_margin: 0.0, keep_aspect_ratio: true),
 
@@ -25,7 +25,7 @@ Container(
                 mouse_reactive: true,
             ),
             button: (
-                text: "Play",
+                text: "Play Again",
                 font_size: 36.0,
                 normal_image: SolidColor(0.4, 0.4, 0.4, 1.),
                 hover_image: SolidColor(0.5, 0.5, 0.5, 1.),

@@ -475,39 +475,6 @@ impl<'s> System<'s> for PhysicsDeletionSystem {
     }
 }
 
-struct BounceSystem;
-
-impl<'s> System<'s> for BounceSystem {
-    type SystemData = (
-        Write<'s, Physics<f32>>,
-        Option<Read<'s, SoundStorage>>,
-        Option<Read<'s, Output>>,
-        Read<'s, AssetStorage<Source>>,
-    );
-
-    fn run(&mut self, (mut physics, storage, output, sources): Self::SystemData) {
-        let mut contacts = Vec::new();
-        for (col_handle1, collider1, col_handle2, collider2, _, manifold) in
-            physics.geo_world.contact_pairs(&physics.colliders, true)
-        {
-            if let Some(tracked_contact) = manifold.deepest_contact() {
-                let BodyPartHandle(handle1, _) = collider1.body_part(0);
-                let BodyPartHandle(handle2, _) = collider2.body_part(0);
-                contacts.push((handle1.clone(), handle2.clone(), tracked_contact.clone()));
-            }
-        }
-        for (handle1, handle2, tracked_contact) in contacts.iter() {
-            if let Some(ref output) = output.as_ref() {
-                if let Some(ref sounds) = storage.as_ref() {
-                    if let Some(sound) = sources.get(&sounds.bounce_wav.clone()) {
-                        output.play_once(sound, 1.0);
-                    }
-                }
-            }
-        }
-    }
-}
-
 pub struct PhysicsBundle;
 
 impl<'a, 'b> SystemBundle<'a, 'b> for PhysicsBundle {
@@ -519,7 +486,6 @@ impl<'a, 'b> SystemBundle<'a, 'b> for PhysicsBundle {
         dispatcher.add(PhysicsSpawningSystem, "physics_spawn", &[]);
         dispatcher.add(PhysicsSystem, "physics", &["physics_spawn"]);
         dispatcher.add(PhysicsDeletionSystem, "physics_delete", &[]);
-        // dispatcher.add(BounceSystem, "bounce", &[]);
         Ok(())
     }
 }

@@ -15,6 +15,7 @@ use amethyst::{
     audio::{AudioBundle, SourceHandle, WavFormat},
     core::transform::*,
     ecs::*,
+    input::{is_close_requested, is_key_down},
     prelude::*,
     renderer::{
         bundle::RenderingBundle,
@@ -27,11 +28,12 @@ use amethyst::{
         ImageFormat, SpriteRender, SpriteSheet, SpriteSheetFormat,
     },
     tiles::{MortonEncoder, RenderTiles2D},
-    ui::{RenderUi, UiBundle, UiCreator},
+    ui::{RenderUi, UiBundle, UiCreator, UiEventType, UiFinder},
     utils::{
         application_root_dir,
         fps_counter::{FpsCounter, FpsCounterBundle},
     },
+    winit::VirtualKeyCode,
 };
 use amethyst_imgui::RenderImgui;
 use assets::*;
@@ -59,6 +61,7 @@ struct GameplayState {
 }
 impl SimpleState for GameplayState {
     fn on_start(&mut self, mut data: StateData<'_, GameData<'_, '_>>) {
+        data.world.delete_all();
         data.world.insert(self.assets.0.clone());
         data.world.insert(self.assets.1.clone());
         data.world.insert(self.assets.2.clone());
@@ -67,6 +70,70 @@ impl SimpleState for GameplayState {
         data.world.exec(|mut creator: UiCreator<'_>| {
             creator.create(get_resource("hud.ron"), ());
         });
+    }
+
+    fn update(&mut self, data: &mut StateData<'_, GameData<'_, '_>>) -> SimpleTrans {
+        let (entities, names): (Entities<'_>, ReadStorage<'_, Named>) = data.world.system_data();
+        if get_named_entity(&entities, &names, "player").is_none() {
+            return SimpleTrans::Switch(Box::new(MenuState {
+                assets: self.assets.clone(),
+                menu: "game_over.ron",
+            }));
+        }
+        if get_named_entity(&entities, &names, "pylon").is_none() {
+            return SimpleTrans::Switch(Box::new(MenuState {
+                assets: self.assets.clone(),
+                menu: "game_over.ron",
+            }));
+        }
+        SimpleTrans::None
+    }
+}
+
+struct MenuState {
+    assets: (SpriteStorage, PrefabStorage, SoundStorage, MapStorage),
+    menu: &'static str,
+}
+impl SimpleState for MenuState {
+    fn on_start(&mut self, mut data: StateData<'_, GameData<'_, '_>>) {
+        data.world.delete_all();
+        data.world.exec(|mut creator: UiCreator<'_>| {
+            creator.create(get_resource(self.menu), ());
+        });
+    }
+
+    fn handle_event(
+        &mut self,
+        data: StateData<'_, GameData<'_, '_>>,
+        event: StateEvent,
+    ) -> SimpleTrans {
+        match &event {
+            StateEvent::Window(event) => {
+                if is_close_requested(&event) {
+                    Trans::Quit
+                } else {
+                    Trans::None
+                }
+            }
+            StateEvent::Ui(ui_event) => data.world.exec(|finder: UiFinder<'_>| {
+                if ui_event.event_type == UiEventType::Click {
+                    if let Some(start) = finder.find("play") {
+                        if start == ui_event.target {
+                            return Trans::Push(Box::new(GameplayState {
+                                assets: self.assets.clone(),
+                            }));
+                        }
+                    }
+                    if let Some(exit) = finder.find("exit") {
+                        if exit == ui_event.target {
+                            return Trans::Quit;
+                        }
+                    }
+                }
+                Trans::None
+            }),
+            _ => Trans::None,
+        }
     }
 }
 
@@ -89,9 +156,24 @@ impl SimpleState for LoadingState {
             get_resource("Enemies1.ron"),
             &mut progress_counter,
         );
-        let bounce_wav = load_sound_file(
+        let goblin_hit = load_sound_file(
             data.world,
-            get_resource("bounce.wav"),
+            get_resource("Goblin_Hit.wav"),
+            &mut progress_counter,
+        );
+        let player_hit = load_sound_file(
+            data.world,
+            get_resource("Player_Hit.wav"),
+            &mut progress_counter,
+        );
+        let pylon_hit = load_sound_file(
+            data.world,
+            get_resource("Pylon_Hit.wav"),
+            &mut progress_counter,
+        );
+        let sword_slash = load_sound_file(
+            data.world,
+            get_resource("Sword_Slash.wav"),
             &mut progress_counter,
         );
 
@@ -108,7 +190,12 @@ impl SimpleState for LoadingState {
                 player: player_prefab,
                 crab: crab_prefab,
             },
-            SoundStorage { bounce_wav },
+            SoundStorage {
+                goblin_hit,
+                player_hit,
+                pylon_hit,
+                sword_slash,
+            },
             MapStorage { village_map },
         ));
     }
@@ -117,8 +204,9 @@ impl SimpleState for LoadingState {
         if let Some(progress) = &self.progress {
             println!("{:?}", progress);
             if progress.is_complete() {
-                return SimpleTrans::Switch(Box::new(GameplayState {
+                return SimpleTrans::Switch(Box::new(MenuState {
                     assets: self.assets.clone().unwrap(),
+                    menu: "main_menu.ron",
                 }));
             }
         }

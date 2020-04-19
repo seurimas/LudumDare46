@@ -114,6 +114,7 @@ impl<'s> System<'s> for AttackHitboxSystem {
         WriteStorage<'s, Goblin>,
         WriteStorage<'s, Pylon>,
         ReadStorage<'s, AttackHitbox>,
+        SoundPlayer<'s>,
         Entities<'s>,
     );
 
@@ -129,6 +130,7 @@ impl<'s> System<'s> for AttackHitboxSystem {
             mut goblins,
             mut pylons,
             hitboxes,
+            sounds,
             entities,
         ): Self::SystemData,
     ) {
@@ -152,6 +154,7 @@ impl<'s> System<'s> for AttackHitboxSystem {
                                 &handle,
                                 &hit_handle,
                             );
+                            sounds.player_hit();
                         }
                         if let Some(mut pylon) = pylons.get_mut(hit_entity) {
                             self.hit_pylon(
@@ -162,6 +165,7 @@ impl<'s> System<'s> for AttackHitboxSystem {
                                 &handle,
                                 &hit_handle,
                             );
+                            sounds.pylon_hit();
                         }
                         if let Some(mut goblin) = goblins.get_mut(hit_entity) {
                             self.hit_goblin(
@@ -172,6 +176,7 @@ impl<'s> System<'s> for AttackHitboxSystem {
                                 &handle,
                                 &hit_handle,
                             );
+                            sounds.goblin_hit();
                         }
                     }
                 }
