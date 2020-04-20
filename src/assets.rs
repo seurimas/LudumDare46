@@ -17,11 +17,7 @@ use na::Vector2;
 use serde::{Deserialize, Serialize};
 
 pub fn get_resource(str: &str) -> String {
-    format!(
-        "{}/resources/{}",
-        application_root_dir().unwrap().to_str().unwrap(),
-        str
-    )
+    format!("{}", str)
 }
 
 pub fn load_texture<'a>(

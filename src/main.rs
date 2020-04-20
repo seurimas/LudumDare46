@@ -303,11 +303,7 @@ impl<'s> amethyst::ecs::System<'s> for ImguiDebugSystem {
 
 fn main() -> amethyst::Result<()> {
     amethyst::start_logger(Default::default());
-
-    let app_root = application_root_dir()?;
-
-    let resources_dir = app_root.join("resources");
-    let display_config_path = resources_dir.join("display_config.ron");
+    let display_config_path = get_resource("display_config.ron");
     let input_path = get_resource("input.ron");
 
     let game_data = GameDataBuilder::default()
@@ -350,7 +346,7 @@ fn main() -> amethyst::Result<()> {
         .with_bundle(FpsCounterBundle)?
         .with_bundle(UiBundle::<amethyst::input::StringBindings>::new())?;
 
-    let mut game = Application::new(resources_dir, LoadingState::default(), game_data)?;
+    let mut game = Application::new("", LoadingState::default(), game_data)?;
     game.run();
 
     Ok(())
