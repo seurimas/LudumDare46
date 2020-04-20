@@ -12,7 +12,7 @@ mod world;
 use amethyst::{
     animation::AnimationBundle,
     assets::*,
-    audio::{AudioBundle, SourceHandle, WavFormat},
+    audio::{output::init_output, AudioBundle, SourceHandle, WavFormat},
     core::transform::*,
     ecs::*,
     input::{is_close_requested, is_key_down},
@@ -142,6 +142,8 @@ impl SimpleState for LoadingState {
         data.world.register::<PhysicsHandle>();
         data.world.insert(AssetStorage::<TiledMap>::default());
 
+        init_output(data.world);
+
         let mut progress_counter = ProgressCounter::new();
 
         let tile_spritesheet =
@@ -176,6 +178,11 @@ impl SimpleState for LoadingState {
             get_resource("Sword_Slash.wav"),
             &mut progress_counter,
         );
+        let main_theme = load_sound_file(
+            data.world,
+            get_resource("MainTheme.wav"),
+            &mut progress_counter,
+        );
 
         let village_map = load_map(
             data.world,
@@ -195,6 +202,7 @@ impl SimpleState for LoadingState {
                 player_hit,
                 pylon_hit,
                 sword_slash,
+                main_theme,
             },
             MapStorage { village_map },
         ));
@@ -298,6 +306,7 @@ fn main() -> amethyst::Result<()> {
             "scene_loader",
             &[],
         )
+        .with(DjSystem, "dj", &[])
         .with(Processor::<TiledMap>::new(), "tiled_map_processor", &[])
         .with_bundle(AnimationBundle::<AnimationId, SpriteRender>::new(
             "sprite_animation_control",
@@ -329,10 +338,7 @@ fn main() -> amethyst::Result<()> {
         .with_bundle(EnemiesBundle)?
         .with_bundle(CombatBundle)?
         .with_bundle(FpsCounterBundle)?
-        .with_bundle(UiBundle::<amethyst::input::StringBindings>::new())?
-        .with(DebugDrawShapes, "debug_shapes", &[])
-        .with_barrier()
-        .with(ImguiDebugSystem::default(), "imgui_demo", &[]);
+        .with_bundle(UiBundle::<amethyst::input::StringBindings>::new())?;
 
     let mut game = Application::new(resources_dir, LoadingState::default(), game_data)?;
     game.run();

@@ -118,7 +118,7 @@ impl<'a> SoundPlayer<'a> {
         if let Some(ref output) = self.output.as_ref() {
             if let Some(ref sounds) = self.storage.as_ref() {
                 if let Some(sound) = self.sources.get(&sounds.goblin_hit.clone()) {
-                    output.play_once(sound, 1.0);
+                    output.play_once(sound, 0.20);
                 }
             }
         }
@@ -136,8 +136,32 @@ impl<'a> SoundPlayer<'a> {
         if let Some(ref output) = self.output.as_ref() {
             if let Some(ref sounds) = self.storage.as_ref() {
                 if let Some(sound) = self.sources.get(&sounds.sword_slash.clone()) {
-                    output.play_once(sound, 1.0);
+                    output.play_once(sound, 0.20);
                 }
+            }
+        }
+    }
+    pub fn play_main_theme(&self, sink: &amethyst::audio::AudioSink) {
+        if let Some(ref sounds) = self.storage.as_ref() {
+            if let Some(sound) = self.sources.get(&sounds.main_theme.clone()) {
+                sink.append(sound);
+            }
+        }
+    }
+}
+
+pub struct DjSystem;
+
+impl<'a> System<'a> for DjSystem {
+    type SystemData = (
+        Option<Read<'a, amethyst::audio::AudioSink>>,
+        SoundPlayer<'a>,
+    );
+
+    fn run(&mut self, (sink, player): Self::SystemData) {
+        if let Some(ref sink) = sink {
+            if sink.empty() {
+                player.play_main_theme(sink);
             }
         }
     }

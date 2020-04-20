@@ -89,6 +89,7 @@ pub struct SoundStorage {
     pub player_hit: SourceHandle,
     pub pylon_hit: SourceHandle,
     pub sword_slash: SourceHandle,
+    pub main_theme: SourceHandle,
 }
 
 #[derive(Clone, Debug)]
