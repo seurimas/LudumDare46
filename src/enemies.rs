@@ -33,9 +33,9 @@ fn spawn_crab(
             walk_speed: 40.0,
             state: GoblinState::Idling(waypoint.clone(), 1.0),
             facing: Direction::South,
-            attack_distance: 60.0,
+            attack_distance: 70.0,
             lunge_speed: 120.0,
-            chase_distance: 60.0,
+            chase_distance: 80.0,
         })
         .with(Health::new(false, 3))
         .with(transform)
@@ -481,12 +481,12 @@ impl<'s> System<'s> for WaveSystem {
             if transform.id.eq("goblin_count") {
                 if goblin_count > 0 {
                     text.text = format!("Goblins Left: {}", goblin_count);
-                } else if waves.idle_time < 15.0 {
-                    text.text = format!("Next wave in: {}", (15 - waves.idle_time as usize));
+                } else if waves.idle_time < 5.0 {
+                    text.text = format!("Next wave in: {}", (5 - waves.idle_time as usize));
                 }
             }
         }
-        if waves.idle_time > 15.0 && waves.wave_num < SPAWNS.len() {
+        if waves.idle_time > 5.0 && waves.wave_num < SPAWNS.len() {
             lazy.exec_mut(|world| {
                 let spawners = world.exec(
                     |(waves, entities, transforms, spawners): (

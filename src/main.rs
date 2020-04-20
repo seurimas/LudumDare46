@@ -63,8 +63,8 @@ impl SimpleState for GameplayState {
     fn on_start(&mut self, mut data: StateData<'_, GameData<'_, '_>>) {
         data.world.delete_all();
         data.world.insert(WaveState {
-            idle_time: 14.0,
-            wave_num: 3,
+            idle_time: 0.0,
+            wave_num: 0,
         });
         data.world.insert(self.assets.0.clone());
         data.world.insert(self.assets.1.clone());
