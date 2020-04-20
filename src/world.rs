@@ -141,11 +141,13 @@ fn follow_waypoints(
         for i in 0..waypoints.len() {
             let ent = waypoint_entities.get(i).unwrap();
             let (wx, wy, wt) = waypoints.get(i).unwrap();
-            let (best, distance) = closest_waypoint(*wx, *wy, waypoints, Some(*wt));
-            println!("{} to {}", i, best);
-            if let Some(mut waypoint_obj) = waypoints_store.get_mut(*ent) {
-                println!("{}", distance);
-                waypoint_obj.next = waypoint_entities.get(best).cloned();
+            if *wt > 1 {
+                let (best, distance) = closest_waypoint(*wx, *wy, waypoints, Some(*wt));
+                println!("{} to {}", i, best);
+                if let Some(mut waypoint_obj) = waypoints_store.get_mut(*ent) {
+                    println!("{}", distance);
+                    waypoint_obj.next = waypoint_entities.get(best).cloned();
+                }
             }
         }
     });

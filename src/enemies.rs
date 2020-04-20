@@ -31,7 +31,7 @@ fn spawn_crab(
         .with(prefab)
         .with(Goblin {
             walk_speed: 40.0,
-            state: GoblinState::Idling(waypoint.clone(), 5.0),
+            state: GoblinState::Idling(waypoint.clone(), 1.0),
             facing: Direction::South,
             attack_distance: 60.0,
             lunge_speed: 120.0,
@@ -85,7 +85,7 @@ fn spawn_waypoint(player_builder: EntityBuilder, x: f32, y: f32) -> Entity {
         .with(transform)
         .with(Waypoint {
             next: None,
-            margin: 8.0,
+            margin: 64.0,
         })
         .build()
 }
@@ -267,6 +267,7 @@ impl<'s> System<'s> for GoblinAiSystem {
         WriteStorage<'s, AnimationControlSet<AnimationId, SpriteRender>>,
         WriteStorage<'s, Goblin>,
         WriteStorage<'s, AttackHitbox>,
+        ReadStorage<'s, GoblinSpawner>,
         Read<'s, LazyUpdate>,
         Entities<'s>,
     );
@@ -285,6 +286,7 @@ impl<'s> System<'s> for GoblinAiSystem {
             mut control_sets,
             mut goblins,
             mut attacks,
+            _spawner,
             lazy,
             entities,
         ): Self::SystemData,
@@ -440,13 +442,20 @@ impl<'s> System<'s> for GoblinAiSystem {
         }
     }
 }
-pub struct WaveSystem {
-    idle_time: f32,
-    wave_num: usize,
+
+#[derive(Default)]
+pub struct WaveState {
+    pub idle_time: f32,
+    pub wave_num: usize,
 }
+
+pub struct WaveSystem;
+
+pub const SPAWNS: &'static [usize] = &[3, 5, 7, 9, 11];
 
 impl<'s> System<'s> for WaveSystem {
     type SystemData = (
+        Write<'s, WaveState>,
         ReadStorage<'s, Goblin>,
         Read<'s, LazyUpdate>,
         ReadStorage<'s, UiTransform>,
@@ -454,29 +463,34 @@ impl<'s> System<'s> for WaveSystem {
         Read<'s, Time>,
         Entities<'s>,
     );
-    fn run(&mut self, (goblins, lazy, transforms, mut ui_texts, time, entities): Self::SystemData) {
+    fn run(
+        &mut self,
+        (mut waves, goblins, lazy, transforms, mut ui_texts, time, entities): Self::SystemData,
+    ) {
         let mut goblin_count = 0;
         for _goblin in (&goblins).join() {
             goblin_count += 1;
         }
         if goblin_count == 0 {
-            self.idle_time += time.delta_seconds();
-        } else {
-            self.idle_time = 0.0;
+            waves.idle_time += time.delta_seconds();
+        } else if waves.idle_time != 0.0 {
+            waves.idle_time = 0.0;
+            waves.wave_num += 1;
         }
         for (transform, text) in (&transforms, &mut ui_texts).join() {
             if transform.id.eq("goblin_count") {
                 if goblin_count > 0 {
                     text.text = format!("Goblins Left: {}", goblin_count);
-                } else if self.idle_time < 15.0 {
-                    text.text = format!("Next wave in: {}", (15 - self.idle_time as usize));
+                } else if waves.idle_time < 15.0 {
+                    text.text = format!("Next wave in: {}", (15 - waves.idle_time as usize));
                 }
             }
         }
-        if self.idle_time > 15.0 {
+        if waves.idle_time > 15.0 && waves.wave_num < SPAWNS.len() {
             lazy.exec_mut(|world| {
                 let spawners = world.exec(
-                    |(entities, transforms, spawners): (
+                    |(waves, entities, transforms, spawners): (
+                        Read<'_, WaveState>,
                         Entities<'_>,
                         ReadStorage<'_, Transform>,
                         ReadStorage<'_, GoblinSpawner>,
@@ -492,8 +506,13 @@ impl<'s> System<'s> for WaveSystem {
                         spawn_list
                     },
                 );
-                for (tx, ty, waypoint) in spawners.iter() {
-                    println!("{} {}", tx, ty);
+                let wave_num: usize = {
+                    let wave_state = world.read_resource::<WaveState>();
+                    wave_state.wave_num
+                };
+                for i in 0..SPAWNS[wave_num] {
+                    let spawner_id: usize = rand::random::<usize>() % spawners.len();
+                    let (tx, ty, waypoint) = spawners.get(spawner_id).unwrap();
                     spawn_goblin_world(world, *tx, *ty, waypoint);
                 }
             });
@@ -509,14 +528,7 @@ impl<'a, 'b> SystemBundle<'a, 'b> for EnemiesBundle {
         _world: &mut World,
         dispatcher: &mut DispatcherBuilder<'a, 'b>,
     ) -> Result<(), Error> {
-        dispatcher.add(
-            WaveSystem {
-                idle_time: 15.0,
-                wave_num: 1,
-            },
-            "waves",
-            &[],
-        );
+        dispatcher.add(WaveSystem, "waves", &[]);
         dispatcher.add(GoblinAiSystem, "goblin", &[]);
         Ok(())
     }

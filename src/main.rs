@@ -62,6 +62,10 @@ struct GameplayState {
 impl SimpleState for GameplayState {
     fn on_start(&mut self, mut data: StateData<'_, GameData<'_, '_>>) {
         data.world.delete_all();
+        data.world.insert(WaveState {
+            idle_time: 14.0,
+            wave_num: 3,
+        });
         data.world.insert(self.assets.0.clone());
         data.world.insert(self.assets.1.clone());
         data.world.insert(self.assets.2.clone());
@@ -81,6 +85,12 @@ impl SimpleState for GameplayState {
             }));
         }
         if get_named_entity(&entities, &names, "pylon").is_none() {
+            return SimpleTrans::Switch(Box::new(MenuState {
+                assets: self.assets.clone(),
+                menu: "game_over.ron",
+            }));
+        }
+        if data.world.read_resource::<WaveState>().wave_num == SPAWNS.len() {
             return SimpleTrans::Switch(Box::new(MenuState {
                 assets: self.assets.clone(),
                 menu: "game_over.ron",

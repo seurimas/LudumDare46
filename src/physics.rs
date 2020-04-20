@@ -338,7 +338,7 @@ impl<N: RealField> Physics<N> {
 impl<N: RealField> Default for Physics<N> {
     fn default() -> Self {
         let mut mech_world = DefaultMechanicalWorld::new(Vector2::new(N::zero(), N::zero()));
-        mech_world.set_timestep(N::from_f32(1.0 / 30.0).unwrap());
+        // mech_world.set_timestep(N::from_f32(1.0 / 30.0).unwrap());
         Self {
             mech_world,
             geo_world: DefaultGeometricalWorld::new(),
@@ -486,6 +486,7 @@ impl<'a, 'b> SystemBundle<'a, 'b> for PhysicsBundle {
         dispatcher.add(PhysicsSpawningSystem, "physics_spawn", &[]);
         dispatcher.add(PhysicsSystem, "physics", &["physics_spawn"]);
         dispatcher.add(PhysicsDeletionSystem, "physics_delete", &[]);
+        // dispatcher.add(BounceSystem, "bounce", &[]);
         Ok(())
     }
 }

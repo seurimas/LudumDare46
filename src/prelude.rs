@@ -109,7 +109,7 @@ impl<'a> SoundPlayer<'a> {
         if let Some(ref output) = self.output.as_ref() {
             if let Some(ref sounds) = self.storage.as_ref() {
                 if let Some(sound) = self.sources.get(&sounds.player_hit.clone()) {
-                    output.play_once(sound, 1.0);
+                    output.play_once(sound, 0.75);
                 }
             }
         }
@@ -127,7 +127,7 @@ impl<'a> SoundPlayer<'a> {
         if let Some(ref output) = self.output.as_ref() {
             if let Some(ref sounds) = self.storage.as_ref() {
                 if let Some(sound) = self.sources.get(&sounds.pylon_hit.clone()) {
-                    output.play_once(sound, 1.0);
+                    output.play_once(sound, 0.5);
                 }
             }
         }
